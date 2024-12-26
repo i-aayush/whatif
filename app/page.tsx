@@ -110,7 +110,7 @@ export default function Home() {
                   objectFit="cover"
                 />
               </div>
-              <p className="mt-4 text-center text-gray-600 italic">"{afterImages[currentIndex].prompt}"</p>
+              <p className="mt-4 text-center text-gray-600 italic">&quot;{afterImages[currentIndex].prompt}&quot;</p>
             </div>
           </div>
         </div>
@@ -132,7 +132,7 @@ export default function Home() {
                   />
                 </div>
                 <div className="p-4">
-                  <p className="text-gray-600 italic">"{image.prompt}"</p>
+                  <p className="text-gray-600 italic">&quot;{image.prompt}&quot;</p>
                 </div>
               </div>
             ))}
@@ -190,4 +190,3 @@ export default function Home() {
     </div>
   )
 }
-

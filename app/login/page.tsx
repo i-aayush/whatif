@@ -17,7 +17,7 @@ export default function Login() {
     try {
       await login(email, password)
       router.push('/get-started')
-    } catch (error) {
+    } catch {
       setError('Login failed. Please check your credentials.')
     }
   }
@@ -65,4 +65,3 @@ export default function Login() {
     </div>
   )
 }
-

@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { loadStripe } from '@stripe/stripe-js'
 
 // Replace with your Stripe publishable key
 const stripePromise = loadStripe('pk_test_your_publishable_key')
 
-export default function Checkout() {
+function CheckoutContent() {
   const [loading, setLoading] = useState(false)
   const searchParams = useSearchParams()
   const plan = searchParams.get('plan')
@@ -76,6 +76,14 @@ export default function Checkout() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function Checkout() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <CheckoutContent />
+    </Suspense>
   )
 }
 
