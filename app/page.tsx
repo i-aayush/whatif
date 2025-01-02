@@ -40,12 +40,31 @@ const pricingPlans = [
     name: 'Enterprise',
     price: 49.99,
     features: ['Unlimited AI-generated images', 'Full suite of editing tools', '24/7 priority support'],
-  }
+  },
+]
+
+const hoverImages = [
+  {
+    title: 'Explore Creativity',
+    description: 'Transform your photos with AI-powered tools.',
+    src: 'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/out-0%20(2)-7rhltGwd9MUOr8TZrhCt7NWWtA7ZDC.png',
+  },
+  {
+    title: 'Professional Edits',
+    description: 'AI-powered photo enhancements for professionals.',
+    src: 'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/out-1%20(1)-wKPB041GtFPoxyo06N9ookHzT1KAZW.png',
+  },
+  {
+    title: 'Modern Aesthetics',
+    description: 'Bring your imagination to life with our AI.',
+    src: 'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/out-0%20(2).jpg-HJRrPUh6z0JjxIRqXSUGv3YVVQjqYI.jpeg',
+  },
 ]
 
 export default function Home() {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isVisible, setIsVisible] = useState(false)
+  const [isHovered, setIsHovered] = useState<number | null>(null)
 
   useEffect(() => {
     setIsVisible(true)
@@ -58,29 +77,53 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Hero Section */}
-      <section className="relative h-screen flex items-center justify-center overflow-hidden">
-        <div className="absolute inset-0 z-0">
-          <Image
-            src="/placeholder.svg?height=1080&width=1920"
-            alt="Background"
-            layout="fill"
-            objectFit="cover"
-            className="filter blur-sm"
-          />
-        </div>
-        <div className="relative z-10 text-center text-white">
-          <h1 className="text-6xl font-bold mb-4 transition-all duration-700 ease-in-out transform"
-              style={{ opacity: isVisible ? 1 : 0, transform: isVisible ? 'translateY(0)' : 'translateY(20px)' }}>
-            Reimagine Yourself
+      <section className="relative h-screen flex items-center justify-center bg-gradient-to-r from-indigo-500 to-purple-500 text-white">
+        <div className="text-center">
+          <h1 className="text-5xl font-bold mb-4 transition-transform duration-700 transform hover:scale-105">
+            Welcome to AI World
           </h1>
-          <p className="text-xl mb-8 transition-all duration-700 ease-in-out delay-300 transform"
-             style={{ opacity: isVisible ? 1 : 0, transform: isVisible ? 'translateY(0)' : 'translateY(20px)' }}>
-            Transform your photos with AI-powered creativity
+          <p className="text-xl mb-8 opacity-90 hover:opacity-100 transition duration-300">
+            Redefine creativity with AI.
           </p>
-          <Link href="/get-started" 
-                className="bg-white text-indigo-600 px-8 py-3 rounded-full font-semibold text-lg hover:bg-indigo-100 transition duration-300">
+          <Link
+            href="/get-started"
+            className="px-8 py-3 bg-white text-indigo-600 rounded-full shadow-lg hover:bg-indigo-100 transition-all duration-300 font-medium"
+          >
             Get Started
           </Link>
+        </div>
+      </section>
+
+      {/* Hover Showcase */}
+      <section className="py-20 bg-white">
+        <div className="container mx-auto px-4">
+          <h2 className="text-4xl font-bold text-center mb-12">Interactive Showcase</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {hoverImages.map((image, index) => (
+              <div
+                key={index}
+                onMouseEnter={() => setIsHovered(index)}
+                onMouseLeave={() => setIsHovered(null)}
+                className="relative overflow-hidden bg-gray-50 rounded-lg shadow-lg cursor-pointer transition-transform duration-500 hover:scale-105"
+              >
+                <Image
+                  src={image.src}
+                  alt={image.title}
+                  layout="fill"
+                  objectFit="cover"
+                  className="absolute inset-0 z-0"
+                />
+                <div
+                  className={`absolute inset-0 z-10 bg-black bg-opacity-50 flex flex-col items-center justify-center p-4 transition-opacity duration-500 ${
+                    isHovered === index ? 'opacity-100' : 'opacity-0'
+                  }`}
+                >
+                  <h3 className="text-2xl font-bold text-white mb-2">{image.title}</h3>
+                  <p className="text-sm text-gray-200 text-center">{image.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -116,30 +159,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Prompts and Images Showcase */}
-      <section className="py-20 bg-gray-100">
-        <div className="container mx-auto px-4">
-          <h2 className="text-4xl font-bold text-center mb-12">Endless Possibilities</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {afterImages.map((image, index) => (
-              <div key={index} className="bg-white rounded-lg overflow-hidden shadow-lg">
-                <div className="relative h-64">
-                  <Image
-                    src={image.image}
-                    alt={image.prompt}
-                    layout="fill"
-                    objectFit="cover"
-                  />
-                </div>
-                <div className="p-4">
-                  <p className="text-gray-600 italic">&quot;{image.prompt}&quot;</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* Pricing Section */}
       <section className="py-20 bg-white">
         <div className="container mx-auto px-4">
@@ -160,8 +179,10 @@ export default function Home() {
                       </li>
                     ))}
                   </ul>
-                  <Link href={`/checkout?plan=${plan.name.toLowerCase()}&cycle=monthly`}
-                        className="block w-full text-center bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 transition duration-300">
+                  <Link
+                    href={`/checkout?plan=${plan.name.toLowerCase()}&cycle=monthly`}
+                    className="block w-full text-center bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 transition duration-300"
+                  >
                     Get Started
                   </Link>
                 </div>
@@ -181,8 +202,10 @@ export default function Home() {
         <div className="container mx-auto px-4 text-center">
           <h2 className="text-4xl font-bold mb-4">Ready to Reimagine Yourself?</h2>
           <p className="text-xl mb-8">Join thousands of users who have already transformed their photos with AI</p>
-          <Link href="/get-started" 
-                className="bg-white text-indigo-600 px-8 py-3 rounded-full font-semibold text-lg hover:bg-indigo-100 transition duration-300">
+          <Link
+            href="/get-started"
+            className="bg-white text-indigo-600 px-8 py-3 rounded-full font-semibold text-lg hover:bg-indigo-100 transition duration-300"
+          >
             Start Your Journey
           </Link>
         </div>
