@@ -49,17 +49,18 @@ export default function ExamplesShowcase() {
         </div>
 
         <div className="grid md:grid-cols-2 gap-8 items-start max-w-6xl mx-auto">
-          <div className="overflow-hidden rounded-lg shadow-lg">
-            <div className="relative aspect-square">
-              <Image
-                src={examples[selectedIndex].image}
-                alt="AI generated image example"
-                fill
-                style={{ objectFit: 'cover' }}
-                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                priority
-              />
-            </div>
+          <div 
+            className="relative aspect-[3/4] w-full overflow-hidden rounded-lg shadow-lg"
+            style={{ position: 'relative' }}
+          >
+            <Image
+              src={examples[selectedIndex].image}
+              alt="AI generated image example"
+              fill
+              className="object-cover rounded-lg"
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              priority
+            />
           </div>
 
           <div className="space-y-6">

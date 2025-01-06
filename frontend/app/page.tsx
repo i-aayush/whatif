@@ -78,7 +78,7 @@ export default function Home() {
       {/* Hero Section */}
       <div className="relative h-[80vh] w-full bg-gray-900">
         {/* 3D Model */}
-        <div className="absolute inset-0 z-0">
+        <div className="absolute inset-0 z-0 transform scale-125 overflow-hidden [mask-image:linear-gradient(to_bottom,black_50%,transparent_100%)]">
           <Spline
             scene="https://prod.spline.design/cbIRUSBPIoZNerUS/scene.splinecode" 
             className="w-full h-full"
