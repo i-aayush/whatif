@@ -1,29 +1,20 @@
 {
   "name": "whatif",
-  "version": "0.1.0",
-  "private": true,
+  "version": "1.0.0",
+  "description": "WhatIf - AI-Powered Image Generation",
   "scripts": {
-    "dev": "next dev --turbopack",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "frontend:dev": "cd frontend && npm run dev",
+    "frontend:build": "cd frontend && npm run build",
+    "frontend:start": "cd frontend && npm run start",
+    "backend:dev": "cd backend && uvicorn app.main:app --reload",
+    "backend:install": "cd backend && pip install -r requirements.txt",
+    "install": "cd frontend && npm install"
   },
+  "author": "",
+  "license": "ISC",
   "dependencies": {
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "next": "15.1.2",
-    "@stripe/stripe-js": "^5.4.0",
-    "stripe": "^17.5.0"
-  },
-  "devDependencies": {
-    "typescript": "^5",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "postcss": "^8",
-    "tailwindcss": "^3.4.1",
-    "eslint": "^9",
-    "eslint-config-next": "15.1.2",
-    "@eslint/eslintrc": "^3"
+    "@splinetool/react-spline": "^4.0.0",
+    "@splinetool/runtime": "^1.9.56",
+    "swiper": "^11.2.0"
   }
 }

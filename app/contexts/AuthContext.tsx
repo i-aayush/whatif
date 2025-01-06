@@ -27,47 +27,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [])
 
   const login = async (email: string, password: string) => {
-    const response = await fetch('/api/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        'username': email,
-        'password': password,
-      })
-    })
+    try {
+      const formData = new URLSearchParams();
+      formData.append('username', email); // FastAPI OAuth2 expects 'username' field
+      formData.append('password', password);
 
-    if (response.ok) {
-      const data = await response.json()
-      const user = { email }
-      setUser(user)
-      localStorage.setItem('user', JSON.stringify(user))
-      localStorage.setItem('token', data.access_token)
-    } else {
-      throw new Error('Login failed')
+      const response = await fetch('http://localhost:8000/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: formData
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Login failed');
+      }
+
+      const data = await response.json();
+      const userData = { email: data.email };
+      setUser(userData);
+      localStorage.setItem('user', JSON.stringify(userData));
+      localStorage.setItem('token', data.token);
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
     }
   }
 
   const signup = async (email: string, password: string) => {
     try {
-      const response = await fetch('/api/signup', {
+      const response = await fetch('http://localhost:8000/api/auth/signup', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          'username': email,
-          'password': password,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          password,
         })
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Signup failed:', response.status, errorText);
-        throw new Error(`Signup failed: ${response.status} ${errorText}`);
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Signup failed');
       }
 
       const data = await response.json();
-      console.log('Signup successful:', data);
-      // After successful signup, log the user in
-      await login(email, password);
+      const userData = { email: data.email };
+      setUser(userData);
+      localStorage.setItem('user', JSON.stringify(userData));
+      localStorage.setItem('token', data.token);
     } catch (error) {
       console.error('Signup error:', error);
       throw error;
@@ -87,7 +98,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   )
 }
 
-export default AuthProvider;
+export default AuthProvider
 
 export const useAuth = () => {
   const context = useContext(AuthContext)

@@ -1,36 +1,83 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# WhatIf - AI-Powered Image Generation
 
-## Getting Started
+A full-stack application for AI-powered image generation and manipulation.
 
-First, run the development server:
+## Project Structure
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+whatif/
+├── frontend/          # Next.js frontend application
+│   ├── app/          # Frontend source code
+│   ├── public/       # Static files
+│   └── package.json  # Frontend dependencies
+└── backend/          # FastAPI backend application
+    ├── app/          # Backend source code
+    └── requirements.txt  # Python dependencies
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Setup Instructions
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Backend Setup
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Create and activate a Python virtual environment:
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
 
-## Learn More
+2. Install dependencies:
+```bash
+npm run backend:install
+# or directly:
+pip install -r requirements.txt
+```
 
-To learn more about Next.js, take a look at the following resources:
+3. Create a `.env` file in the backend directory:
+```
+MONGODB_URI=mongodb://localhost:27017
+JWT_SECRET=your-secret-key-here
+DEBUG=True
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+4. Start the backend server:
+```bash
+npm run backend:dev
+# or directly:
+uvicorn app.main:app --reload
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The backend will be available at `http://localhost:8000`
 
-## Deploy on Vercel
+### Frontend Setup
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. Install dependencies:
+```bash
+npm run install
+# or directly:
+cd frontend && npm install
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+2. Start the development server:
+```bash
+npm run frontend:dev
+# or directly:
+cd frontend && npm run dev
+```
+
+The frontend will be available at `http://localhost:3000`
+
+## Available Scripts
+
+- `npm run frontend:dev` - Start frontend development server
+- `npm run frontend:build` - Build frontend for production
+- `npm run frontend:start` - Start frontend production server
+- `npm run backend:dev` - Start backend development server
+- `npm run backend:install` - Install backend dependencies
+- `npm run install` - Install frontend dependencies
+
+## API Documentation
+
+Once the backend is running, you can access the API documentation at:
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
