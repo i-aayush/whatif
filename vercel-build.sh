@@ -1,5 +1,10 @@
 #!/bin/bash
 echo "Building project..."
+
+# Debug info
+echo "Checking directory sizes before build:"
+du -sh *
+
 if [ -f "frontend/package.json" ]; then
     cd frontend
     npm install
@@ -17,6 +22,10 @@ if [ -f "backend/requirements.txt" ]; then
     cd ..
 fi 
 
+# Debug info after installation
+echo "Checking directory sizes after installation:"
+du -sh *
+
 # Aggressive cleanup
 find . -type d -name "__pycache__" -exec rm -r {} +
 find . -type d -name "*.dist-info" -exec rm -r {} +
@@ -27,3 +36,7 @@ find . -type f -name "*.pyd" -delete
 find . -type d -name "tests" -exec rm -r {} +
 find . -type d -name "test" -exec rm -r {} +
 find . -type f -name "*.so" -delete
+
+# Debug info after cleanup
+echo "Checking directory sizes after cleanup:"
+du -sh *
