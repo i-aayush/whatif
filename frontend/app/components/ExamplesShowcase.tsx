@@ -7,27 +7,27 @@ import Link from "next/link"
 const examples = [
   {
     prompt: "Professional portrait in Paris, holding a sign that says 'I ❤️ Mishu' in front of the Eiffel Tower, natural lighting, candid smile",
-    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/out-0-7rhltGwd9MUOr8TZrhCt7NWWtA7ZDC.png",
+    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/out-0%20(2)-7rhltGwd9MUOr8TZrhCt7NWWtA7ZDC.png",
     style: "Travel Photography"
   },
   {
     prompt: "DJ performing at an outdoor festival, bright sunlight, crowd in background, professional equipment, energetic pose",
-    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/out-1-wKPB041GtFPoxyo06N9ookHzT1KAZW.png",
+    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/out-1%20(1)-wKPB041GtFPoxyo06N9ookHzT1KAZW.png",
     style: "Event Photography"
   },
   {
     prompt: "Professional headshot, business attire, clean background, natural smile, studio lighting",
-    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/out-2-FpFqZRkj9KKhuB3r65kfcEu54DOdRM.jpg",
+    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/out-1%20(1).jpg-FpFqZRkj9KKhuB3r65kfcEu54DOdRM.jpeg",
     style: "Corporate Portrait"
   },
   {
     prompt: "Cyberpunk street style, neon lights, night scene, urban setting, wearing streetwear and sunglasses",
-    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/out-3-HJRrPUh6z0JjxIRqXSUGv3YVVQjqYI.jpg",
+    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/out-0%20(2).jpg-HJRrPUh6z0JjxIRqXSUGv3YVVQjqYI.jpeg",
     style: "Urban Fashion"
   },
   {
     prompt: "Modern office environment, casual business attire, natural window lighting, warm wooden accents",
-    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/out-4-vSyXAieOHUJPR9Fma3PsmiLy6txhBp.webp",
+    image: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/out-0%20(4)-vSyXAieOHUJPR9Fma3PsmiLy6txhBp.webp",
     style: "Professional Casual"
   }
 ]
@@ -53,12 +53,11 @@ export default function ExamplesShowcase() {
             <div className="relative aspect-square">
               <Image
                 src={examples[selectedIndex].image}
-                alt={`AI generated ${examples[selectedIndex].style} example`}
+                alt="AI generated image example"
                 fill
                 style={{ objectFit: 'cover' }}
                 sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                 priority
-                className="rounded-lg"
               />
             </div>
           </div>
