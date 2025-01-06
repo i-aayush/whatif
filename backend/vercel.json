@@ -1,27 +1,14 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "api/index.py",
-      "use": "@vercel/python",
-      "config": {
-        "maxLambdaSize": "15mb",
-        "runtime": "python3.9",
-        "excludeFiles": [
-          "tests/**",
-          "**/*.pyc",
-          "**/__pycache__/**",
-          ".pytest_cache/**",
-          ".coverage",
-          "htmlcov/**"
-        ]
-      }
+  "functions": {
+    "api/*.py": {
+      "memory": 256,
+      "maxDuration": 10
     }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "api/index.py"
+  },
+  "build": {
+    "env": {
+      "PIP_NO_DEPS": "1",
+      "PIP_NO_CACHE_DIR": "1"
     }
-  ]
+  }
 } 

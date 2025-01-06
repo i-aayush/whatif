@@ -6,18 +6,58 @@
       "use": "@vercel/next"
     },
     {
-      "src": "backend/api/index.py",
+      "src": "backend/api/auth.py",
       "use": "@vercel/python",
       "config": {
-        "maxLambdaSize": "15mb",
-        "runtime": "python3.9"
+        "maxLambdaSize": "10mb",
+        "runtime": "python3.9",
+        "excludeFiles": "**/*.?(dist-info|egg-info|tests|test|__pycache__|*.pyc)"
+      }
+    },
+    {
+      "src": "backend/api/users.py",
+      "use": "@vercel/python",
+      "config": {
+        "maxLambdaSize": "10mb",
+        "runtime": "python3.9",
+        "excludeFiles": "**/*.?(dist-info|egg-info|tests|test|__pycache__|*.pyc)"
+      }
+    },
+    {
+      "src": "backend/api/photos.py",
+      "use": "@vercel/python",
+      "config": {
+        "maxLambdaSize": "10mb",
+        "runtime": "python3.9",
+        "excludeFiles": "**/*.?(dist-info|egg-info|tests|test|__pycache__|*.pyc)"
+      }
+    },
+    {
+      "src": "backend/api/generated_images.py",
+      "use": "@vercel/python",
+      "config": {
+        "maxLambdaSize": "10mb",
+        "runtime": "python3.9",
+        "excludeFiles": "**/*.?(dist-info|egg-info|tests|test|__pycache__|*.pyc)"
       }
     }
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "backend/api/index.py"
+      "src": "/api/auth/(.*)",
+      "dest": "backend/api/auth.py"
+    },
+    {
+      "src": "/api/users/(.*)",
+      "dest": "backend/api/users.py"
+    },
+    {
+      "src": "/api/photos/(.*)",
+      "dest": "backend/api/photos.py"
+    },
+    {
+      "src": "/api/generated/(.*)",
+      "dest": "backend/api/generated_images.py"
     },
     {
       "src": "/(.*)",

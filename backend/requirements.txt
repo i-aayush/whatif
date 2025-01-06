@@ -1,9 +1,12 @@
 # Only include packages that are absolutely necessary for production
-fastapi
-python-multipart
-python-jose[cryptography]
-passlib[bcrypt]
-pymongo
-python-dotenv
-uvicorn
+fastapi==0.100.0
+python-multipart==0.0.6
+# Use pyjwt instead of python-jose to reduce cryptography dependencies
+pyjwt==2.8.0
+# Use argon2-cffi instead of passlib[bcrypt] for lighter password hashing
+argon2-cffi==23.1.0
+pymongo==4.5.0
+python-dotenv==1.0.0
+uvicorn==0.22.0
+mangum==0.17.0
 # Remove any development dependencies or unused packages
