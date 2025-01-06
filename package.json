@@ -1,22 +1,9 @@
 {
-  "name": "whatif",
+  "name": "my-project",
   "version": "1.0.0",
-  "description": "WhatIf - AI-Powered Image Generation",
-  "private": true,
-  "workspaces": [
-    "frontend"
-  ],
+  "main": "index.js",
   "scripts": {
-    "frontend:dev": "cd frontend && npm run dev",
-    "frontend:build": "cd frontend && npm run build",
-    "frontend:start": "cd frontend && npm run start",
-    "backend:dev": "cd backend && uvicorn app.main:app --reload",
-    "backend:install": "cd backend && pip install -r requirements.txt",
-    "postinstall": "cd frontend && npm install",
-    "dev": "npm run frontend:dev",
-    "build": "npm run frontend:build",
-    "start": "npm run frontend:start"
+    "start": "node index.js"
   },
-  "author": "",
-  "license": "ISC"
+  "dependencies": {}
 }

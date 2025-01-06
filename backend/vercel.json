@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python",
+      "config": {
+        "maxLambdaSize": "15mb",
+        "runtime": "python3.9",
+        "excludeFiles": [
+          "tests/**",
+          "**/*.pyc",
+          "**/__pycache__/**",
+          ".pytest_cache/**",
+          ".coverage",
+          "htmlcov/**"
+        ]
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "api/index.py"
+    }
+  ]
+} 
