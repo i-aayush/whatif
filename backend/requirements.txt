@@ -1,9 +1,9 @@
-fastapi==0.100.0
-uvicorn==0.22.0
-motor==3.1.1
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-python-multipart==0.0.6
-pydantic==2.0.2
-pydantic-settings==2.0.1
-mangum==0.17.0
+# Only include packages that are absolutely necessary for production
+fastapi
+python-multipart
+python-jose[cryptography]
+passlib[bcrypt]
+pymongo
+python-dotenv
+uvicorn
+# Remove any development dependencies or unused packages
