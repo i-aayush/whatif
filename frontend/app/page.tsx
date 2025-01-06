@@ -1,6 +1,15 @@
 'use client';
 
-import Spline from '@splinetool/react-spline/next';
+import dynamic from 'next/dynamic';
+const Spline = dynamic(() => import('@splinetool/react-spline'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-full flex items-center justify-center">
+      <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-purple-500"></div>
+    </div>
+  )
+});
+
 import Link from 'next/link';
 import ExamplesShowcase from './components/ExamplesShowcase';
 import { Swiper, SwiperSlide } from 'swiper/react';
