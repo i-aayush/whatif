@@ -1,11 +1,18 @@
 'use client';
+import dynamic from 'next/dynamic';
+import { Suspense } from 'react';
+import LoadingSpinner from './LoadingSpinner';
 
-import Spline from '@splinetool/react-spline';
+// Dynamically import Spline with no SSR
+const Spline = dynamic(() => import('@splinetool/react-spline'), {
+  ssr: false,
+  loading: () => <LoadingSpinner />
+});
 
 export default function SplineScene() {
   return (
-    <div className="absolute inset-0 flex items-center justify-center">
-      <div className="w-full h-full relative">
+    <Suspense fallback={<LoadingSpinner />}>
+      <div className="w-full h-full">
         <Spline
           scene="https://prod.spline.design/cbIRUSBPIoZNerUS/scene.splinecode"
           style={{ 
@@ -16,6 +23,6 @@ export default function SplineScene() {
           }}
         />
       </div>
-    </div>
+    </Suspense>
   );
 } 
