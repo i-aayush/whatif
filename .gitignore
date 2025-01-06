@@ -32,6 +32,8 @@ backend/venv/
 /coverage
 
 # Next.js
+# .next/
+**/.next/
 frontend/.next/
 frontend/out/
 frontend/.env*.local
