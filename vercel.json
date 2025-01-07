@@ -9,36 +9,43 @@
       "src": "backend/api/auth.py",
       "use": "@vercel/python",
       "config": {
-        "maxLambdaSize": "10mb",
+        "maxLambdaSize": "50mb",
         "runtime": "python3.9",
-        "excludeFiles": "**/*.?(dist-info|egg-info|tests|test|__pycache__|*.pyc)"
+        "excludeFiles": ["**/*.pyc", "**/__pycache__/**"]
       }
     },
+    {
+        "src": "frontend",
+        "use": "@vercel/python",
+        "config": {
+          "excludeFiles": "{.next,*.cache,node_modules,public,app}/**"
+        }
+      },
     {
       "src": "backend/api/users.py",
       "use": "@vercel/python",
       "config": {
-        "maxLambdaSize": "10mb",
+        "maxLambdaSize": "50mb",
         "runtime": "python3.9",
-        "excludeFiles": "**/*.?(dist-info|egg-info|tests|test|__pycache__|*.pyc)"
+        "excludeFiles": ["**/*.pyc", "**/__pycache__/**"]
       }
     },
     {
       "src": "backend/api/photos.py",
       "use": "@vercel/python",
       "config": {
-        "maxLambdaSize": "10mb",
+        "maxLambdaSize": "50mb",
         "runtime": "python3.9",
-        "excludeFiles": "**/*.?(dist-info|egg-info|tests|test|__pycache__|*.pyc)"
+        "excludeFiles": ["**/*.pyc", "**/__pycache__/**"]
       }
     },
     {
       "src": "backend/api/generated_images.py",
       "use": "@vercel/python",
       "config": {
-        "maxLambdaSize": "10mb",
+        "maxLambdaSize": "50mb",
         "runtime": "python3.9",
-        "excludeFiles": "**/*.?(dist-info|egg-info|tests|test|__pycache__|*.pyc)"
+        "excludeFiles": ["**/*.pyc", "**/__pycache__/**"]
       }
     }
   ],
@@ -63,5 +70,10 @@
       "src": "/(.*)",
       "dest": "frontend/$1"
     }
-  ]
+  ],
+  "functions": {
+    "api/**": {
+      "excludeFiles": "{.next,*.cache,node_modules,public,app}/**"
+    }
+  }
 } 
