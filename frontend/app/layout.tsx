@@ -41,6 +41,12 @@ export default function RootLayout({
                       Home
                     </Link>
                     <Link 
+                      href="/prompt_examples" 
+                      className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white inline-flex items-center px-1 pt-1 text-sm font-medium"
+                    >
+                      WhatIf Examples
+                    </Link>
+                    <Link 
                       href="/get-started" 
                       className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white inline-flex items-center px-1 pt-1 text-sm font-medium"
                     >
