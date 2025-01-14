@@ -51,7 +51,7 @@ export default function ExamplesShowcase() {
         <div className="grid md:grid-cols-2 gap-8 items-start max-w-6xl mx-auto">
           <div 
             className="relative aspect-[3/4] w-full overflow-hidden rounded-lg shadow-lg"
-            style={{ position: 'relative' }}
+            style={{ position: 'relative', height: '600px' }}
           >
             <Image
               src={examples[selectedIndex].image}

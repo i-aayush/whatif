@@ -65,15 +65,50 @@ const testimonials = [
   },
 ];
 
+const exampleImages = [
+  'https://replicate.delivery/czjl/45u7FCzvbU4iFxEGRJ118utg1inYqsPemFtwtPvdBtpn7bCKA/tmp1ckqay7a.jpg',
+  'https://replicate.delivery/czjl/FCDm4HKdu86yN9iC6H2IeKG5CO81ZZnbrWi6sph5ref4svJoA/tmpgozxzev7.jpg',
+  'https://replicate.delivery/czjl/AfaxgE6W0pUeRUS0znWuuqJ3uuHozxsGrVAiRHLq1tHB53EUA/tmpc9l8mw43.jpg',
+  'https://replicate.delivery/czjl/cONRAUa9fv27di8Jstr1KffJVcVSpvIORnKIK1PGB24DpvJoA/tmp6os8pte8.jpg',
+  'https://replicate.delivery/czjl/S5FaUpztxnIHExzTeJ8XkrQLjJlblaJWrsUWQQvkpMC98bCKA/tmp2j3qdd9y.jpg',
+  'https://replicate.delivery/xezq/IDnHpRv5MIbQLtB4njXrW7d3BMqZfkUeyVyUEUFtjAflLwJoA/out-1.png',
+  'https://replicate.delivery/czjl/nYzcWtCpzr4uIV3HVX4Ie6BZTwYaHcBwXuOrFMrEqWu55bCKA/tmpvei9fste.jpg',
+  'https://replicate.delivery/czjl/mUfh1mnpreujVUpqbcrnFPHhwTM9dffVwRRyKgNfNRvq6AngC/tmpjaqkg921.png',  
+
+
+];
+
+const styles = `
+  @keyframes scroll {
+    0% {
+      transform: translateX(0);
+    }
+    100% {
+      transform: translateX(-100%);
+    }
+  }
+  
+  .animate-scroll {
+    animation: scroll 120s linear infinite;
+  }
+`;
+
+const StyleSheet = () => (
+  <style jsx global>
+    {styles}
+  </style>
+);
+
 export default function Home() {
   const { user } = useAuth();
   
   return (
     <div className="min-h-screen">
+      <StyleSheet />
       {/* Hero Section */}
       <div className="relative h-[80vh] w-full bg-gray-900">
         {/* 3D Model */}
-        <div className="absolute inset-0 z-0 transform scale-125 overflow-hidden [mask-image:linear-gradient(to_bottom,black_50%,transparent_100%)]">
+        <div className="absolute inset-0 z-0 transform scale-100 [mask-image:linear-gradient(to_bottom,black_50%,transparent_100%)]">
           <Spline
             scene="https://prod.spline.design/cbIRUSBPIoZNerUS/scene.splinecode" 
             className="w-full h-full"
@@ -108,56 +143,58 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Features Section */}
+      {/* Infinite Image Carousel */}
       <div className="py-24 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-16">
           <div className="text-center">
             <h2 className="text-3xl font-extrabold text-gray-900 sm:text-4xl">
-              Features that make us special
+              Bring stories alive with AI characters
             </h2>
             <p className="mt-4 text-xl text-gray-500">
-              Experience the power of AI-driven image transformation
+              Unlock the power of AI to create stunning images and videos starring your own custom-designed virtual humans
             </p>
           </div>
+        </div>
 
-          <div className="mt-20 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
-            {/* Feature Items */}
-            {[
-              {
-                title: 'AI-Powered Transformations',
-                description: 'Transform your photos into unique artistic styles using advanced AI algorithms.',
-              },
-              {
-                title: 'Multiple Variations',
-                description: 'Generate multiple unique variations from a single photo.',
-              },
-              {
-                title: 'Easy Sharing',
-                description: 'Share your transformed images easily with friends and social media.',
-              },
-            ].map((feature, index) => (
-              <div key={index} className="pt-6">
-                <div className="flow-root rounded-lg bg-gray-50 px-6 pb-8">
-                  <div className="-mt-6">
-                    <div className="inline-flex items-center justify-center rounded-md bg-indigo-500 p-3 shadow-lg">
-                      <svg
-                        className="h-6 w-6 text-white"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                        />
-                      </svg>
-                    </div>
-                    <h3 className="mt-8 text-lg font-medium text-gray-900">{feature.title}</h3>
-                    <p className="mt-5 text-base text-gray-500">{feature.description}</p>
-                  </div>
-                </div>
+        <div className="w-full overflow-hidden">
+          <div className="flex gap-8 animate-scroll">
+            {/* First set of images */}
+            {exampleImages.map((image, index) => (
+              <div 
+                key={`first-${index}`} 
+                className="flex-none w-[300px] h-[500px] rounded-2xl overflow-hidden"
+              >
+                <img
+                  src={image}
+                  alt={`Example ${index + 1}`}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            ))}
+            {/* Duplicate set for seamless loop */}
+            {exampleImages.map((image, index) => (
+              <div 
+                key={`second-${index}`} 
+                className="flex-none w-[300px] h-[500px] rounded-2xl overflow-hidden"
+              >
+                <img
+                  src={image}
+                  alt={`Example ${index + 1}`}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            ))}
+            {/* Another duplicate set */}
+            {exampleImages.map((image, index) => (
+              <div 
+                key={`third-${index}`} 
+                className="flex-none w-[300px] h-[500px] rounded-2xl overflow-hidden"
+              >
+                <img
+                  src={image}
+                  alt={`Example ${index + 1}`}
+                  className="w-full h-full object-cover"
+                />
               </div>
             ))}
           </div>
