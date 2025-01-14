@@ -19,3 +19,5 @@ coverage.xml
 .venv
 venv/
 ENV/ 
+.next
+node_modules

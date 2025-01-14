@@ -1,30 +1,30 @@
 #!/bin/bash
+set -e  # Exit on error
+
 echo "Building project..."
 
+# Frontend build
 if [ -f "frontend/package.json" ]; then
     cd frontend
-    npm install
-    npm run build
+    echo "Installing frontend dependencies..."
+    npm ci --production || { echo "Frontend dependency installation failed"; exit 1; }
+    echo "Building frontend..."
+    npm run build || { echo "Frontend build failed"; exit 1; }
     cd ..
+else
+    echo "Warning: frontend/package.json not found"
 fi
 
-if [ -f "backend/requirements.txt" ]; then
-    cd backend
-    # Create a virtual environment
-    python -m venv .venv
-    source .venv/bin/activate
+# Backend build
+if [ -f "requirements.txt" ]; then
+    echo "Installing backend dependencies..."
+    python -m pip install -r requirements.txt || { echo "Backend dependency installation failed"; exit 1; }
     
-    # Install packages with minimal dependencies
-    pip install --no-cache-dir --no-deps -r requirements.txt
+    # Copy requirements.txt to backend/api for Vercel
+    cp requirements.txt backend/api/
     
-    # Cleanup unnecessary files
-    find . -type d -name "__pycache__" -exec rm -r {} +
-    find . -type d -name "*.dist-info" -exec rm -r {} +
-    find . -type d -name "*.egg-info" -exec rm -r {} +
-    find . -type f -name "*.pyc" -delete
-    find . -type f -name "*.pyo" -delete
-    find . -type f -name "*.pyd" -delete
-    
-    deactivate
-    cd ..
+else
+    echo "Warning: requirements.txt not found"
 fi
+
+echo "Build completed successfully"

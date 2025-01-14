@@ -1,60 +1,71 @@
-/** @type {import('next').NextConfig} */
 const nextConfig = {
     reactStrictMode: true,
     images: {
-        domains: ['hebbkx1anhila5yf.public.blob.vercel-storage.com'],
-        remotePatterns: [
-            {
-                protocol: 'https',
-                hostname: 'hebbkx1anhila5yf.public.blob.vercel-storage.com',
-                port: '',
-                pathname: '/**',
-            },
-        ],
+      domains: ['hebbkx1anhila5yf.public.blob.vercel-storage.com', 'whatif-genai.s3.amazonaws.com'],
+      remotePatterns: [
+        {
+          protocol: 'https',
+          hostname: 'hebbkx1anhila5yf.public.blob.vercel-storage.com',
+          port: '',
+          pathname: '/**',
+        },
+        {
+          protocol: 'https',
+          hostname: 'whatif-genai.s3.amazonaws.com',
+          port: '',
+          pathname: '/**',
+        },
+      ],
     },
-    async rewrites() {
-        return [
-            {
-                source: '/api/:path*',
-                destination: 'http://localhost:8000/api/:path*',
-            },
-        ]
+        rewrites: async () => {
+            return [
+                {
+                    source: '/api/:path*',
+                    destination: '/api/:path*'
+                }
+            ];
+        },
+ 
+    experimental: {
+      optimizeCss: true,
     },
     webpack: (config, { isServer }) => {
-        config.resolve.fallback = { fs: false, path: false };
-        config.optimization = {
-            ...config.optimization,
-            splitChunks: {
-                chunks: 'all',
-                minSize: 20000,
-                maxSize: 244000,
-                cacheGroups: {
-                    spline: {
-                        test: /[\\/]node_modules[\\/](@splinetool)[\\/]/,
-                        name: 'spline-vendor',
-                        priority: 10,
-                        reuseExistingChunk: true,
-                    },
-                    default: {
-                        minChunks: 2,
-                        priority: -20,
-                        reuseExistingChunk: true,
-                    },
-                },
-            },
-        };
-        return config;
+      if (config.optimization && config.optimization.minimizer) {
+        config.optimization.minimizer = config.optimization.minimizer.map((plugin) => {
+          if (plugin.constructor.name === 'TerserPlugin') {
+            return new plugin.constructor({
+              ...plugin.options,
+              terserOptions: {
+                keep_classnames: true, // Prevents mangling of class names
+                keep_fnames: true, // Prevents mangling of function names
+                mangle: false, // Disables mangling altogether
+              },
+            });
+          }
+          return plugin;
+        });
+      }
+  
+      // Ensure proper handling of `@splinetool/react-spline` and `@splinetool/runtime`
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        '@splinetool/runtime': require.resolve('@splinetool/runtime'),
+      };
+  
+      if (isServer) {
+        config.externals = [
+          ...config.externals,
+          '@splinetool/react-spline',
+          '@splinetool/runtime',
+        ];
+      }
+  
+      return config;
     },
-    experimental: {
-        optimizeCss: true,
-    },
-}
-
-const withBundleAnalyzer = require('@next/bundle-analyzer')({
-    enabled: process.env.ANALYZE === 'true',
-});
-
-// Combine the configurations
-module.exports = withBundleAnalyzer(nextConfig); 
+    transpilePackages: ['@splinetool/react-spline', '@splinetool/runtime'],
+  };
+  
+  module.exports = nextConfig;
+  
 
 

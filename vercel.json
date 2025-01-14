@@ -1,79 +1,35 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "frontend/next.config.js",
-      "use": "@vercel/next"
-    },
-    {
-      "src": "backend/api/auth.py",
-      "use": "@vercel/python",
-      "config": {
-        "maxLambdaSize": "50mb",
-        "runtime": "python3.9",
-        "excludeFiles": ["**/*.pyc", "**/__pycache__/**"]
-      }
-    },
-    {
-        "src": "frontend",
+    "version": 2,
+    "buildCommand": "./vercel-build.sh",
+    "builds": [
+      {
+        "src": "frontend/next.config.js",
+        "use": "@vercel/next"
+      },
+      {
+        "src": "backend/app/main.py",
         "use": "@vercel/python",
         "config": {
-          "excludeFiles": "{.next,*.cache,node_modules,public,app}/**"
+          "maxLambdaSize": "15mb",
+          "runtime": "python3.9",
+          "installCommand": "pip install -r ../../requirements.txt --no-cache-dir"
+        }
+      }
+    ],
+    "routes": [
+      {
+        "src": "/api/(.*)",
+        "dest": "/backend/app/main.py",
+        "headers": {
+          "Access-Control-Allow-Credentials": "true",
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "*",
+          "Access-Control-Allow-Headers": "*"
         }
       },
-    {
-      "src": "backend/api/users.py",
-      "use": "@vercel/python",
-      "config": {
-        "maxLambdaSize": "50mb",
-        "runtime": "python3.9",
-        "excludeFiles": ["**/*.pyc", "**/__pycache__/**"]
+      {
+        "src": "/((?!api/).*)",
+        "dest": "/frontend/$1"
       }
-    },
-    {
-      "src": "backend/api/photos.py",
-      "use": "@vercel/python",
-      "config": {
-        "maxLambdaSize": "50mb",
-        "runtime": "python3.9",
-        "excludeFiles": ["**/*.pyc", "**/__pycache__/**"]
-      }
-    },
-    {
-      "src": "backend/api/generated_images.py",
-      "use": "@vercel/python",
-      "config": {
-        "maxLambdaSize": "50mb",
-        "runtime": "python3.9",
-        "excludeFiles": ["**/*.pyc", "**/__pycache__/**"]
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/auth/(.*)",
-      "dest": "backend/api/auth.py"
-    },
-    {
-      "src": "/api/users/(.*)",
-      "dest": "backend/api/users.py"
-    },
-    {
-      "src": "/api/photos/(.*)",
-      "dest": "backend/api/photos.py"
-    },
-    {
-      "src": "/api/generated/(.*)",
-      "dest": "backend/api/generated_images.py"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "frontend/$1"
-    }
-  ],
-  "functions": {
-    "api/**": {
-      "excludeFiles": "{.next,*.cache,node_modules,public,app}/**"
-    }
+    ]
   }
-} 

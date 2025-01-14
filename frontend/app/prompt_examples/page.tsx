@@ -3,8 +3,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 const ImageGallery: React.FC = () => {
   const imageUrls = [
-      'https://whatif-genai.s3.amazonaws.com/prompt_images/1NYLbWd.jpeg',
-      'https://whatif-genai.s3.amazonaws.com/prompt_images/IaGGAJx.jpeg',
+    'https://whatif-genai.s3.amazonaws.com/prompt_images/IaGGAJx.jpeg',
+    'https://whatif-genai.s3.amazonaws.com/prompt_images/1NYLbWd.jpeg',
       'https://whatif-genai.s3.amazonaws.com/prompt_images/Ciuh0MY.jpeg',
       'https://whatif-genai.s3.amazonaws.com/prompt_images/BAztCQz.jpeg',
       'https://whatif-genai.s3.amazonaws.com/prompt_images/9ezSDut.jpeg',
@@ -102,7 +102,7 @@ const ImageGallery: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 py-12">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <h1 className="text-4xl font-bold text-gray-900 text-center mb-8">
           WhatIf prompt gallery
         </h1>

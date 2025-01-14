@@ -18,7 +18,7 @@ export default function Login() {
 
     try {
       await login(email, password);
-      router.push('/get-started');
+      router.push('/pricing');
     } catch (err) {
       setError('Failed to login. Please check your credentials.');
     }
@@ -80,7 +80,7 @@ export default function Login() {
             <div>
               <button
                 type="submit"
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:bg-gradient-to-r from-purple-600 to-pink-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
               >
                 Sign in
               </button>
@@ -89,7 +89,7 @@ export default function Login() {
 
           <div className="mt-6">
             <div className="text-sm text-center">
-              <Link href="/signup" className="font-medium text-indigo-600 hover:text-indigo-500">
+              <Link href="/signup" className="font-medium text-gradient-to-r from-purple-600 to-pink-600 hover:text-indigo-500">
                 Don&apos;t have an account? Sign up
               </Link>
             </div>

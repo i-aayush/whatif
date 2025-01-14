@@ -25,7 +25,9 @@ async def signup(user: UserCreate, db: AsyncIOMotorDatabase = Depends(get_db)):
     user_in_db = UserInDB(
         email=user.email,
         hashed_password=get_password_hash(user.password),
-        name=user.name
+        full_name=user.full_name,
+        age=user.age,
+        gender=user.gender
     )
     
     result = await db.users.insert_one(user_in_db.dict(by_alias=True))
@@ -33,13 +35,14 @@ async def signup(user: UserCreate, db: AsyncIOMotorDatabase = Depends(get_db)):
     # Generate token
     token = create_access_token(data={"sub": user.email})
     
-    return UserResponse(email=user.email, token=token)
+    return UserResponse(email=user.email, token=token, full_name=user.full_name)
 
 @router.post("/login", response_model=UserResponse)
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
+    print("HEY")
     user = await db.users.find_one({"email": form_data.username})
     if not user or not verify_password(form_data.password, user["hashed_password"]):
         raise HTTPException(
@@ -51,7 +54,7 @@ async def login(
     # Generate token
     token = create_access_token(data={"sub": form_data.username})
     
-    return UserResponse(email=form_data.username, token=token)
+    return UserResponse(email=form_data.username, token=token, full_name=user["full_name"])
 
 @router.get("/me", response_model=User)
 async def get_current_user_profile(current_user: dict = Depends(get_current_user)):

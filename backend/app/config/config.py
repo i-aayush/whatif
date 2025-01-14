@@ -10,7 +10,8 @@ class Settings(BaseSettings):
     JWT_SECRET: str = os.getenv("JWT_SECRET", "your-secret-key")
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
-    REPLICATE_KEY: str = os.getenv("REPLICATE_KEY", "your-replicate-key")
-
+    REPLICATE_KEY: str = os.getenv("REPLICATE_API_TOKEN", "your-replicate-key")
+    RAZORPAY_KEY_ID: str = os.getenv("RAZORPAY_KEY_ID", "your-razorpay-key-id")
+    RAZORPAY_KEY_SECRET: str = os.getenv("RAZORPAY_KEY_SECRET", "your-razorpay-key-secret")
 
 settings = Settings() 

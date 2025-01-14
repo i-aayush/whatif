@@ -1,15 +1,18 @@
 'use client'
 
 import React, { createContext, useState, useContext, useEffect } from 'react'
+import { API_URL } from '../config/config';
 
 interface User {
   email: string
+  full_name: string
+  phone_number?: string
 }
 
 interface AuthContextType {
   user: User | null
   login: (email: string, password: string) => Promise<void>
-  signup: (email: string, password: string) => Promise<void>
+  signup: (email: string, password: string, fullName: string, age: number, gender: string) => Promise<void>
   logout: () => void
 }
 
@@ -31,8 +34,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const formData = new URLSearchParams();
       formData.append('username', email); // OAuth2 expects 'username' field
       formData.append('password', password);
-
-      const response = await fetch('http://localhost:8000/api/auth/login', {
+      console.log(`${API_URL}/auth/login`)
+      const response = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -46,7 +49,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const data = await response.json();
-      const userData = { email: data.email };
+      const userData = { email: data.email, full_name: data.full_name };
       setUser(userData);
       localStorage.setItem('user', JSON.stringify(userData));
       localStorage.setItem('token', data.token);
@@ -56,9 +59,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }
 
-  const signup = async (email: string, password: string) => {
+  const signup = async (email: string, password: string, fullName: string, age: number, gender: string) => {
     try {
-      const response = await fetch('http://localhost:8000/api/auth/signup', {
+      const response = await fetch(`${API_URL}/auth/signup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -66,6 +69,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         body: JSON.stringify({
           email,
           password,
+          full_name: fullName,
+          age,
+          gender
         })
       });
 
@@ -75,7 +81,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const data = await response.json();
-      const userData = { email: data.email };
+      const userData = { email: data.email, full_name: data.full_name };
       setUser(userData);
       localStorage.setItem('user', JSON.stringify(userData));
       localStorage.setItem('token', data.token);
