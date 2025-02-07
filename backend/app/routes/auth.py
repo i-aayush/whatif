@@ -21,7 +21,7 @@ import base64
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from ..utils.profiler import profiler
+
 
 # Set up logging with a higher level for production
 logging.basicConfig(level=logging.WARNING if settings.ENVIRONMENT == "production" else logging.INFO)
@@ -122,18 +122,17 @@ async def login(
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
     try:
-        with profiler("login_flow"):
-            user = await db['users'].find_one({"email": credentials.username})
-            
-            if not user or not verify_password(credentials.password, user["hashed_password"]):
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Incorrect email or password",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
-            
-            token = create_access_token(data={"sub": credentials.username})
-            return UserResponse(email=credentials.username, token=token, full_name=user["full_name"])
+        user = await db['users'].find_one({"email": credentials.username})
+        
+        if not user or not verify_password(credentials.password, user["hashed_password"]):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        token = create_access_token(data={"sub": credentials.username})
+        return UserResponse(email=credentials.username, token=token, full_name=user["full_name"])
             
     except Exception as e:
         logger.error(f"Login error: {str(e)}", exc_info=True)
@@ -147,30 +146,27 @@ async def get_current_user_profile(current_user: dict = Depends(get_current_user
 @router.get('/google/login')
 async def google_login(request: Request):
     try:
-        with profiler("google_login_init"):
-            # Keep only essential logging in production
-            if settings.ENVIRONMENT != "production":
-                logger.info("Google Login Request initiated")
-            
-            # Get the host from headers
-            with profiler("redirect_uri_generation"):
-                host = request.headers.get('x-forwarded-host', request.headers.get('host', 'localhost'))
-                scheme = request.headers.get('x-forwarded-proto', 'https')
-                redirect_uri = f"{scheme}://{host}/api/auth/google/callback"
-            
-            # Generate state
-            with profiler("state_generation"):
-                timestamp = int(time.time())
-                state_data = f"{secrets.token_urlsafe(8)}:{timestamp}"
-                encrypted_state = fernet.encrypt(state_data.encode()).decode()
-                safe_state = quote(encrypted_state, safe='')
-            
-            # Redirect to Google
-            return await oauth.google.authorize_redirect(
-                request,
-                redirect_uri,
-                state=safe_state
-            )
+        # Keep only essential logging in production
+        if settings.ENVIRONMENT != "production":
+            logger.info("Google Login Request initiated")
+        
+        # Get the host from headers
+        host = request.headers.get('x-forwarded-host', request.headers.get('host', 'localhost'))
+        scheme = request.headers.get('x-forwarded-proto', 'https')
+        redirect_uri = f"{scheme}://{host}/api/auth/google/callback"
+        
+        # Generate state
+        timestamp = int(time.time())
+        state_data = f"{secrets.token_urlsafe(8)}:{timestamp}"
+        encrypted_state = fernet.encrypt(state_data.encode()).decode()
+        safe_state = quote(encrypted_state, safe='')
+        
+        # Redirect to Google
+        return await oauth.google.authorize_redirect(
+            request,
+            redirect_uri,
+            state=safe_state
+        )
             
     except Exception as e:
         logger.error(f"Error in google_login: {str(e)}", exc_info=True)
@@ -179,81 +175,75 @@ async def google_login(request: Request):
 @router.get('/google/callback')
 async def google_auth(request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
     try:
-        with profiler("google_callback"):
-            frontend_url = get_frontend_url()
-            
-            # Verify state
-            with profiler("state_verification"):
-                encrypted_state = request.query_params.get('state', '')
-                if not encrypted_state:
-                    return RedirectResponse(url=f"{frontend_url}/login?error=Invalid session")
-                
-                try:
-                    decoded_state = unquote(encrypted_state)
-                    decrypted_data = fernet.decrypt(decoded_state.encode()).decode()
-                    random_str, timestamp_str = decrypted_data.split(':')
-                    timestamp = int(timestamp_str)
-                    if int(time.time()) - timestamp > 900:
-                        return RedirectResponse(url=f"{frontend_url}/login?error=Session expired")
-                except Exception as e:
-                    logger.error(f"State verification failed: {str(e)}")
-                    return RedirectResponse(url=f"{frontend_url}/login?error=Invalid session")
-            
-            # Get OAuth token
-            with profiler("oauth_token_acquisition"):
-                try:
-                    token = await oauth.google.authorize_access_token(request)
-                    logger.info("OAuth token obtained successfully")
-                except Exception as e:
-                    logger.error(f"OAuth token acquisition failed: {str(e)}", exc_info=True)
-                    return RedirectResponse(
-                        url=f"{frontend_url}/login?error=Authentication failed: Unable to verify OAuth state"
-                    )
-            
-            # Get user info
-            with profiler("user_info_retrieval"):
-                try:
-                    resp = await oauth.google.get('https://www.googleapis.com/oauth2/v3/userinfo', token=token)
-                    user_info = resp.json()
-                except Exception as e:
-                    logger.error(f"Error getting user info: {str(e)}", exc_info=True)
-                    return RedirectResponse(
-                        url=f"{frontend_url}/login?error=Authentication failed: Unable to get user info"
-                    )
-
-            # Process user data and database operations
-            with profiler("user_processing"):
-                email = user_info['email']
-                full_name = user_info.get('name', '')
-                
-                # Check if user exists
-                user = await db.users.find_one({"email": email})
-                
-                if not user:
-                    # Create new user
-                    user_in_db = UserInDB(
-                        email=email,
-                        hashed_password=get_password_hash(os.urandom(32).hex()),
-                        full_name=full_name,
-                        auth_provider="google",
-                        picture_url=user_info.get('picture', ''),
-                        locale=user_info.get('locale', ''),
-                        given_name=user_info.get('given_name', ''),
-                        family_name=user_info.get('family_name', '')
-                    )
-                    await db.users.insert_one(user_in_db.dict(by_alias=True))
-                
-            # Generate JWT token
-            with profiler("jwt_generation"):
-                access_token = create_access_token(data={"sub": email})
-            
-            # Get user's _id
-            user = await db.users.find_one({"email": email})
-            user_id = str(user["_id"])
-            
+        frontend_url = get_frontend_url()
+        
+        # Verify state
+        encrypted_state = request.query_params.get('state', '')
+        if not encrypted_state:
+            return RedirectResponse(url=f"{frontend_url}/login?error=Invalid session")
+        
+        try:
+            decoded_state = unquote(encrypted_state)
+            decrypted_data = fernet.decrypt(decoded_state.encode()).decode()
+            random_str, timestamp_str = decrypted_data.split(':')
+            timestamp = int(timestamp_str)
+            if int(time.time()) - timestamp > 900:
+                return RedirectResponse(url=f"{frontend_url}/login?error=Session expired")
+        except Exception as e:
+            logger.error(f"State verification failed: {str(e)}")
+            return RedirectResponse(url=f"{frontend_url}/login?error=Invalid session")
+        
+        # Get OAuth token
+        try:
+            token = await oauth.google.authorize_access_token(request)
+            logger.info("OAuth token obtained successfully")
+        except Exception as e:
+            logger.error(f"OAuth token acquisition failed: {str(e)}", exc_info=True)
             return RedirectResponse(
-                url=f"{frontend_url}/login/callback?token={access_token}&email={email}&full_name={full_name}&picture={user_info.get('picture', '')}&auth_provider=google&user_id={user_id}"
+                url=f"{frontend_url}/login?error=Authentication failed: Unable to verify OAuth state"
             )
+        
+        # Get user info
+        try:
+            resp = await oauth.google.get('https://www.googleapis.com/oauth2/v3/userinfo', token=token)
+            user_info = resp.json()
+        except Exception as e:
+            logger.error(f"Error getting user info: {str(e)}", exc_info=True)
+            return RedirectResponse(
+                url=f"{frontend_url}/login?error=Authentication failed: Unable to get user info"
+            )
+
+        # Process user data and database operations
+        email = user_info['email']
+        full_name = user_info.get('name', '')
+        
+        # Check if user exists
+        user = await db.users.find_one({"email": email})
+        
+        if not user:
+            # Create new user
+            user_in_db = UserInDB(
+                email=email,
+                hashed_password=get_password_hash(os.urandom(32).hex()),
+                full_name=full_name,
+                auth_provider="google",
+                picture_url=user_info.get('picture', ''),
+                locale=user_info.get('locale', ''),
+                given_name=user_info.get('given_name', ''),
+                family_name=user_info.get('family_name', '')
+            )
+            await db.users.insert_one(user_in_db.dict(by_alias=True))
+        
+        # Generate JWT token
+        access_token = create_access_token(data={"sub": email})
+        
+        # Get user's _id
+        user = await db.users.find_one({"email": email})
+        user_id = str(user["_id"])
+        
+        return RedirectResponse(
+            url=f"{frontend_url}/login/callback?token={access_token}&email={email}&full_name={full_name}&picture={user_info.get('picture', '')}&auth_provider=google&user_id={user_id}"
+        )
             
     except Exception as e:
         logger.error(f"Critical OAuth error: {str(e)}", exc_info=True)

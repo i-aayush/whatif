@@ -15,6 +15,7 @@ from backend.app.routes import auth, users, photos, generated_images, subscripti
 from backend.app.config.config import settings
 from starlette.middleware.sessions import SessionMiddleware
 import secrets
+from backend.app.utils.db import get_background_db_client, close_background_client
 
 # Set up file logging
 log_file = '/tmp/api.log'
@@ -60,8 +61,20 @@ except Exception as e:
     log_exception(e, "backend imports")
     raise
 
-# Initialize FastAPI
-app = FastAPI(title="WhatIf API",root_path="/api")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifecycle manager for the FastAPI app"""
+    # Startup: nothing special needed as background client is created on demand
+    yield
+    # Shutdown: close the background client
+    close_background_client()
+
+# Initialize FastAPI with lifespan manager
+app = FastAPI(
+    title="WhatIf API",
+    root_path="/api",
+    lifespan=lifespan
+)
 
 # Generate a secure session key if not provided in environment
 SESSION_SECRET = os.environ.get('SESSION_SECRET', secrets.token_urlsafe(32))
@@ -70,71 +83,49 @@ SESSION_SECRET = os.environ.get('SESSION_SECRET', secrets.token_urlsafe(32))
 app.add_middleware(
     SessionMiddleware,
     secret_key=SESSION_SECRET,
-    session_cookie="whatif_session",    # Custom cookie name
-    max_age=3600,                       # 1 hour session timeout
-    same_site="lax",                    # Prevents CSRF while allowing OAuth
-    https_only=settings.ENVIRONMENT == "production",  # HTTPS only in production
-    path="/api/",                       # Restrict cookie to API paths
+    session_cookie="whatif_session",
+    max_age=3600,
+    same_site="lax",
+    https_only=settings.ENVIRONMENT == "production",
+    path="/api/",
 )
 
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
-
-#MongoDB client as a global variable
-mongodb_client = None
-mongodb = None
-
-@asynccontextmanager
-async def get_db_context():
-    """Async context manager for MongoDB connection"""
-    global mongodb_client, mongodb
-    try:
-        # Always create a new client for each request in serverless environment
-        logger.info("Creating MongoDB connection")
-        client = AsyncIOMotorClient(
-            settings.MONGODB_URI,
-            server_api=ServerApi('1'),
-            tlsAllowInvalidCertificates=True,
-            serverSelectionTimeoutMS=50000,
-            connectTimeoutMS=50000,
-            socketTimeoutMS=50000
-        )
-        
-        # Verify the connection
-        await client.admin.command('ping')
-        logger.info("Successfully connected to MongoDB!")
-        
-        db = client[settings.DB_NAME]
-        yield db
-        
-    except Exception as e:
-        logger.error(f"MongoDB connection error: {str(e)}")
-        raise
-    finally:
-        # Always close the client after the request in serverless
-        if client:
-            client.close()
-            logger.info("Closed MongoDB connection")
 
 # Dependency to inject MongoDB into requests
 @app.middleware("http")
 async def db_session_middleware(request: Request, call_next):
-    async with get_db_context() as db:
-        request.state.mongodb = db
+    client = AsyncIOMotorClient(
+        settings.MONGODB_URI,
+        server_api=ServerApi('1'),
+        tlsAllowInvalidCertificates=True,
+        serverSelectionTimeoutMS=50000,
+        connectTimeoutMS=50000,
+        socketTimeoutMS=50000
+    )
+    
+    try:
+        # Verify the connection
+        await client.admin.command('ping')
+        logger.info("Successfully connected to MongoDB!")
+        
+        request.state.mongodb = client[settings.DB_NAME]
         response = await call_next(request)
         return response
+    except Exception as e:
+        logger.error(f"MongoDB connection error: {str(e)}")
+        raise
+    finally:
+        client.close()
+        logger.info("Closed request-scoped MongoDB connection")
 
-async def get_mongodb():
-    """Get MongoDB connection, creating it if necessary"""
-    async with get_db_context() as db:
-        return db
-    
 # Include routers
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(users.router, prefix="/users", tags=["users"])
@@ -143,7 +134,6 @@ app.include_router(generated_images.router, prefix="/generated-images", tags=["g
 app.include_router(subscriptions.router, prefix="/subscriptions", tags=["subscriptions"])
 app.include_router(training.router, prefix="/training", tags=["training"])
 app.include_router(canvas_inference.router, prefix="/canvasinference", tags=["canvasinference"])
-
 
 @app.get("/")
 async def root():

@@ -4,6 +4,7 @@ import boto3
 import os
 import replicate
 from ..utils.auth import get_current_user
+from ..utils.db import get_background_db_client
 import zipfile
 import io
 import uuid
@@ -16,14 +17,23 @@ import logging
 import tempfile
 import shutil
 from pathlib import Path
-from starlette.datastructures import State
 import json
+from ..config.config import settings
+from bson.objectid import ObjectId
+from ..utils.prompt_inferences import run_model_inferences
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Remove the module-level database client
+# Instead, create a function to get a fresh background client when needed
+async def get_training_db():
+    """Get a fresh database client for training operations"""
+    client = get_background_db_client()
+    return client[settings.DB_NAME]
 
 # Initialize S3 client with retry configuration
 s3_config = Config(
@@ -68,131 +78,128 @@ def create_replicate_model(client, model_name: str) -> str:
             return f"{REPLICATE_USERNAME}/{model_name}"
         raise HTTPException(status_code=500, detail=f"Failed to create model: {str(e)}")
 
-async def poll_training_status(training_id: str, user_id: str, replicate_client, db_client: AsyncIOMotorClient):
-    """Background task to poll training status"""
-    logger = logging.getLogger(__name__)
-    logger.info(f"Starting polling for training {training_id}")
-    
-    # Constants for polling configuration
-    MAX_POLLING_DURATION = 2 * 60 * 60  # 24 hours in seconds
-    MAX_ATTEMPTS = 48  # Maximum number of polling attempts
-    BASE_INTERVAL = 30  # Start with 5 minutes
-    MAX_INTERVAL = 1800  # Maximum interval of 30 minutes
-    
-    start_time = datetime.utcnow()
-    attempt = 0
-    
+async def update_error_status(db_client, training_id: str, user_id: str, error_message: str):
+    """Helper function to update error status in database"""
     try:
-        while True:
-            try:
-                # Check if we've exceeded the maximum polling duration
-                elapsed_time = (datetime.utcnow() - start_time).total_seconds()
-                if elapsed_time >= MAX_POLLING_DURATION:
-                    error_message = "Training polling exceeded maximum duration of 24 hours"
-                    logger.error(f"{error_message} for training {training_id}")
-                    raise TimeoutError(error_message)
-                
-                # Check if we've exceeded the maximum number of attempts
-                if attempt >= MAX_ATTEMPTS:
-                    error_message = f"Training polling exceeded maximum attempts of {MAX_ATTEMPTS}"
-                    logger.error(f"{error_message} for training {training_id}")
-                    raise TimeoutError(error_message)
-                
-                # Get training status
-                training = replicate_client.trainings.get(training_id)
-                status = training.status
-                update_data = {"status": status}
-
-                if status == "succeeded":
-                    # Training completed successfully
-                    version = training.version
-                    weights = version.openapi_schema.get("weights")
-                    update_data.update({
-                        "completed_at": datetime.utcnow().isoformat() + 'Z',
-                        "version": version.id,
-                        "weights": weights
-                    })
-                    
-                    # Update user model status
-                    await db_client["whatif"]["users"].update_one(
-                        {"_id": user_id},
-                        {"$set": {
-                            "model_status": "ready",
-                            "current_training_id": None
-                        }}
-                    )
-                    logger.info(f"Training {training_id} completed successfully")
-                    break
-                    
-                elif status in ["failed", "canceled"]:
-                    # Training failed or was canceled
-                    error_message = training.error or "Training failed or was canceled"
-                    update_data.update({
-                        "status": "error",
-                        "error": error_message,
-                        "completed_at": datetime.utcnow().isoformat() + 'Z'
-                    })
-                    
-                    # Update user status
-                    await db_client["whatif"]["users"].update_one(
-                        {"_id": user_id},
-                        {"$set": {
-                            "model_status": "error",
-                            "current_training_id": None,
-                            "last_error": error_message
-                        }}
-                    )
-                    logger.info(f"Training {training_id} failed or was canceled: {error_message}")
-                    break
-
-                # Update training run in database
-                await db_client["whatif"]["training_runs"].update_one(
-                    {"training_id": training_id},
-                    {"$set": update_data}
-                )
-                logger.info(f"Updated training status for {training_id}: {status}")
-                
-            except Exception as e:
-                logger.error(f"Error in polling iteration for {training_id}: {str(e)}")
-                # Don't break the polling loop for transient errors
-            
-            # Calculate next polling interval with exponential backoff
-            interval = min(BASE_INTERVAL * (2 ** attempt), MAX_INTERVAL)
-            attempt += 1
-            
-            # Wait before next poll
-            await asyncio.sleep(interval)
-
-    except Exception as e:
-        error_message = str(e)
-        logger.error(f"Error in polling training status for {training_id}: {error_message}")
+        # Update training run
+        await db_client["whatif"]["training_runs"].update_one(
+            {"training_id": training_id},
+            {"$set": {
+                "status": "error",
+                "error": error_message,
+                "completed_at": datetime.utcnow()
+            }}
+        )
         
-        try:
-            # Update status to error in case of exception
-            await db_client["whatif"]["training_runs"].update_one(
+        # Update user status
+        await db_client["whatif"]["users"].update_one(
+            {"_id": user_id},
+            {"$set": {
+                "model_status": "error",
+                "current_training_id": None,
+                "last_error": error_message
+            }}
+        )
+    except Exception as e:
+        logger.error(f"Failed to update error status in database: {str(e)}")
+
+async def poll_training_status(training_id: str, user_id: str, replicate_client: replicate.Client, db_client: AsyncIOMotorClient):
+    """Poll training status and update database"""
+    try:
+        training = replicate_client.trainings.get(training_id)
+        
+        while training.status not in ["succeeded", "failed", "canceled"]:
+            await asyncio.sleep(60)  # Check every minute
+            training = replicate_client.trainings.get(training_id)
+            logger.info(f"Training status for {training_id}: {training.status}")
+
+        logger.info(f"Training completed with status: {training.status}")
+        
+        if training.status == "succeeded":
+            # Get the trained model version
+            model_version = training.version
+            
+            # Update training run status
+            await db_client["training_runs"].update_one(
                 {"training_id": training_id},
                 {"$set": {
-                    "status": "error",
-                    "error": error_message,
-                    "completed_at": datetime.utcnow().isoformat() + 'Z'
+                    "status": "completed",
+                    "completed_at": datetime.utcnow(),
+                    "model_version": model_version.id if model_version else None
                 }}
             )
             
-            await db_client["whatif"]["users"].update_one(
-                {"_id": user_id},
+            # Update user's model information
+            await db_client["users"].update_one(
+                {"_id": ObjectId(user_id)},
                 {"$set": {
-                    "model_status": "error",
-                    "current_training_id": None,
-                    "last_error": error_message
+                    "model_status": "completed",
+                    "current_training_id": None
                 }}
             )
-            logger.error(f"Updated error status for training {training_id}")
             
-        except Exception as db_error:
-            logger.error(f"Failed to update error status in database: {str(db_error)}")
+            # Run automated inferences if training succeeded
+            try:
+                logger.info(f"Starting automated inferences for model {model_version.id}")
+                inference_ids = await run_model_inferences(
+                    model_id=model_version.id,
+                    user_id=user_id,
+                    db=db_client
+                )
+                logger.info(f"Completed automated inferences, count: {len(inference_ids)}")
+                
+                # Update training run with inference IDs
+                await db_client["training_runs"].update_one(
+                    {"training_id": training_id},
+                    {"$set": {
+                        "automated_inference_ids": inference_ids,
+                        "automated_inference_count": len(inference_ids)
+                    }}
+                )
+            except Exception as e:
+                logger.error(f"Error running automated inferences: {str(e)}")
+                # Don't raise the exception - we don't want to mark the training as failed
+                
+        else:
+            # Update status for failed or canceled training
+            await db_client["training_runs"].update_one(
+                {"training_id": training_id},
+                {"$set": {
+                    "status": "failed" if training.status == "failed" else "canceled",
+                    "completed_at": datetime.utcnow(),
+                    "error": training.error if training.status == "failed" else "Training was canceled"
+                }}
+            )
             
-    finally:
-        logger.info(f"Polling ended for training {training_id}")
+            # Update user's model status
+            await db_client["users"].update_one(
+                {"_id": ObjectId(user_id)},
+                {"$set": {
+                    "model_status": "failed" if training.status == "failed" else "canceled",
+                    "current_training_id": None
+                }}
+            )
+            
+    except Exception as e:
+        logger.error(f"Error in poll_training_status: {str(e)}")
+        # Update training run status
+        await db_client["training_runs"].update_one(
+            {"training_id": training_id},
+            {"$set": {
+                "status": "failed",
+                "error": str(e),
+                "completed_at": datetime.utcnow()
+            }}
+        )
+        
+        # Update user's model status
+        await db_client["users"].update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": {
+                "model_status": "failed",
+                "current_training_id": None
+            }}
+        )
 
 async def save_upload_file_tmp(upload_file: UploadFile) -> str:
     """Saves an upload file temporarily and returns the path"""
@@ -212,13 +219,15 @@ async def upload_and_train(
     files: List[UploadFile],
     model_name: str,
     current_user: dict,
-    db: AsyncIOMotorClient,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    db: AsyncIOMotorClient = Depends(get_db)
 ):
     """Handle file upload and start training process"""
     logger.info(f"Starting upload and train process for user {current_user['_id']} with model name {model_name}")
     temp_files = []
     training_id = None
+    db_error = None
+    background_db = None
 
     try:
         # Create zip file in memory
@@ -306,7 +315,7 @@ async def upload_and_train(
         training_run = {
             "training_id": training_id,
             "user_id": current_user["_id"],
-            "model_name": model_name,
+            "trigger_word": model_name,
             "status": "training",
             "created_at": datetime.utcnow(),
             "replicate_model_id": full_model_name,
@@ -314,11 +323,15 @@ async def upload_and_train(
         }
 
         try:
-            # Insert training run record
-            await db["whatif"]["training_runs"].insert_one(training_run)
+            # Get background client for database operations
+            background_db = get_background_db_client()
+            db_instance = background_db[settings.DB_NAME]
 
-            # Update user's model status
-            await db["whatif"]["users"].update_one(
+            # Insert training run record using background client
+            await db_instance["training_runs"].insert_one(training_run)
+
+            # Update user's model status using background client
+            await db_instance["users"].update_one(
                 {"_id": current_user["_id"]},
                 {
                     "$set": {
@@ -328,7 +341,7 @@ async def upload_and_train(
                     "$push": {
                         "models": {
                             "model_id": str(training_id),
-                            "model_name": model_name,
+                            "trigger_word": model_name,
                             "status": "training",
                             "created_at": datetime.utcnow(),
                             "replicate_model_id": full_model_name
@@ -336,19 +349,22 @@ async def upload_and_train(
                     }
                 }
             )
-        except Exception as db_error:
-            logger.error(f"Database error: {str(db_error)}")
-            # If database operations fail, we should still start the background task
-            # to monitor the training, but log the error
 
-        # Start background polling task
-        background_tasks.add_task(
-            poll_training_status,
-            training_id=training_id,
-            user_id=str(current_user["_id"]),
-            replicate_client=replicate_client,
-            db_client=db
-        )
+            # Start background polling task with the same background client
+            background_tasks.add_task(
+                poll_training_status,
+                training_id=training_id,
+                user_id=str(current_user["_id"]),
+                replicate_client=replicate_client,
+                db_client=db_instance
+            )
+
+        except Exception as e:
+            logger.error(f"Database error: {str(e)}")
+            db_error = e
+
+        if db_error is not None:
+            raise db_error
 
         return {
             "status": "success",
@@ -358,10 +374,11 @@ async def upload_and_train(
 
     except Exception as e:
         logger.error(f"Unhandled exception in upload-and-train: {str(e)}")
-        if training_id:
+        if training_id and background_db:
             # Try to update the training status to error if we have a training ID
             try:
-                await db["whatif"]["training_runs"].update_one(
+                db_instance = background_db[settings.DB_NAME]
+                await db_instance["training_runs"].update_one(
                     {"training_id": training_id},
                     {"$set": {
                         "status": "error",
@@ -371,7 +388,6 @@ async def upload_and_train(
                 )
             except Exception as db_error:
                 logger.error(f"Failed to update error status: {str(db_error)}")
-        raise HTTPException(status_code=500, detail=str(e))
     finally:
         # Clean up temporary files
         for temp_path in temp_files:
@@ -552,7 +568,11 @@ async def init_upload(
     """Initialize a new upload session"""
     try:
         upload_id = str(uuid.uuid4())
-        upload_dir = Path(tempfile.gettempdir()) / upload_id
+        # Use a dedicated directory for upload sessions instead of system temp
+        base_upload_dir = Path("upload_sessions")
+        base_upload_dir.mkdir(exist_ok=True)
+        
+        upload_dir = base_upload_dir / upload_id
         upload_dir.mkdir(exist_ok=True)
         
         # Store session info in a metadata file
@@ -589,8 +609,9 @@ async def upload_chunk(
 ):
     """Handle individual chunk uploads"""
     try:
-        # Verify upload session from filesystem
-        upload_dir = Path(tempfile.gettempdir()) / upload_id
+        # Use the dedicated upload directory
+        base_upload_dir = Path("upload_sessions")
+        upload_dir = base_upload_dir / upload_id
         session_file = upload_dir / "session.json"
         
         if not session_file.exists():
@@ -722,7 +743,8 @@ async def check_training_status(
 
 async def process_completed_upload(upload_id: str, model_name: str, current_user: dict, db: AsyncIOMotorClient, background_tasks: BackgroundTasks):
     """Process a completed upload by assembling chunks and starting training"""
-    upload_dir = Path(tempfile.gettempdir()) / upload_id
+    base_upload_dir = Path("upload_sessions")
+    upload_dir = base_upload_dir / upload_id
     temp_files = []
     upload_files = []
     
@@ -788,7 +810,7 @@ async def process_completed_upload(upload_id: str, model_name: str, current_user
             raise HTTPException(status_code=400, detail="No valid files were assembled")
 
         # Start the training process with assembled files
-        await upload_and_train(
+        return await upload_and_train(
             files=upload_files,
             model_name=model_name,
             current_user=current_user,
@@ -808,32 +830,10 @@ async def process_completed_upload(upload_id: str, model_name: str, current_user
             logger.error(f"Error updating session status: {str(update_error)}")
         raise  # Re-raise the exception after logging
     finally:
-        # Clean up resources
+        # Clean up upload directory after processing is complete
         try:
-            # Close file handles
-            for upload_file in upload_files:
-                try:
-                    upload_file.file.close()
-                except Exception as e:
-                    logger.error(f"Error closing file handle: {str(e)}")
-
-            # Remove temporary files
-            for temp_path in temp_files:
-                try:
-                    os.unlink(temp_path)
-                    logger.info(f"Cleaned up temporary file: {temp_path}")
-                except Exception as e:
-                    logger.error(f"Error removing temp file {temp_path}: {str(e)}")
-
-            # Remove chunk directory
-            try:
-                shutil.rmtree(upload_dir, ignore_errors=True)
-                logger.info(f"Cleaned up chunk directory: {upload_dir}")
-            except Exception as e:
-                logger.error(f"Error removing chunk directory: {str(e)}")
-
-        except Exception as cleanup_error:
-            logger.error(f"Error during cleanup: {str(cleanup_error)}")
-            
-        # Note: We don't close the database connection here anymore
-        # It will be managed by FastAPI's dependency system
+            if upload_dir.exists():
+                shutil.rmtree(upload_dir)
+                logger.info(f"Cleaned up upload directory: {upload_dir}")
+        except Exception as e:
+            logger.error(f"Error cleaning up upload directory {upload_dir}: {str(e)}")

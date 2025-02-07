@@ -71,13 +71,46 @@ async def store_images_to_s3(urls: list, user_id: str, inference_id: str) -> lis
     return s3_urls
 
 def serialize_prediction(prediction):
-    """Helper function to serialize Replicate prediction output"""
-    if isinstance(prediction, list):
-        return [p.url if hasattr(p, 'url') else str(p) for p in prediction]
-    elif hasattr(prediction, 'url'):
-        return [prediction.url]
-    else:
-        return [str(prediction)]
+    """Helper function to serialize Replicate prediction output
+    
+    Handles various types of prediction outputs:
+    - Lists of objects (with or without url attributes)
+    - Single objects (with or without url attributes)
+    - Basic data types (strings, numbers, etc.)
+    
+    Returns:
+        list: A list of URLs or string representations of the predictions
+    """
+    try:
+        if prediction is None:
+            return []
+            
+        if isinstance(prediction, list):
+            urls = []
+            for p in prediction:
+                if hasattr(p, 'url') and p.url:
+                    urls.append(p.url)
+                elif isinstance(p, (str, int, float)):
+                    urls.append(str(p))
+                elif isinstance(p, dict) and 'url' in p:
+                    urls.append(p['url'])
+                else:
+                    logger.warning(f"Skipping unparseable prediction element: {type(p)}")
+            return urls
+            
+        if hasattr(prediction, 'url') and prediction.url:
+            return [prediction.url]
+        elif isinstance(prediction, dict) and 'url' in prediction:
+            return [prediction['url']]
+        elif isinstance(prediction, (str, int, float)):
+            return [str(prediction)]
+            
+        logger.warning(f"Unhandled prediction type: {type(prediction)}")
+        return []
+        
+    except Exception as e:
+        logger.error(f"Error serializing prediction: {str(e)}")
+        return []
 
 @router.post("/inference")
 async def create_inference(

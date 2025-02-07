@@ -21,3 +21,5 @@ venv/
 ENV/ 
 .next
 node_modules
+playwright-report
+test-results

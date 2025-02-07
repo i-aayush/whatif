@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 import razorpay
 from ..models.user import User
 from ..utils.auth import get_current_user
@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from ..dependencies import get_db
+import asyncio
 
 router = APIRouter()
 
@@ -109,6 +110,28 @@ async def create_subscription(
         print(f"Error type: {type(e)}")
         raise HTTPException(status_code=400, detail=f"Subscription creation failed: {str(e)}")
 
+async def verify_subscription_status(
+    subscription_id: str,
+    max_retries: int = 3,
+    retry_delay: int = 5
+) -> Tuple[dict, str]:
+    """
+    Verify subscription status with retries.
+    Returns tuple of (subscription_details, status)
+    """
+    for attempt in range(max_retries):
+        subscription = client.subscription.fetch(subscription_id)
+        status = subscription.get('status', '').lower()
+        
+        if status != 'created':
+            return subscription, status
+            
+        if attempt < max_retries - 1:
+            print(f"Status is still 'created', retrying in {retry_delay} seconds... (Attempt {attempt + 1}/{max_retries})")
+            await asyncio.sleep(retry_delay)
+    
+    return subscription, status
+
 @router.post("/verify-subscription")
 async def verify_subscription(
     request: VerificationRequest,
@@ -132,14 +155,18 @@ async def verify_subscription(
             print(f"Received: {request.signature}")
             raise HTTPException(status_code=400, detail="Invalid payment signature")
 
-        # Verify subscription status
+        # Verify subscription status with retries
         print("Fetching subscription details from Razorpay")
-        subscription = client.subscription.fetch(request.subscription_id)
+        subscription, status = await verify_subscription_status(request.subscription_id)
         print(f"Subscription details: {subscription}")
         
-        if subscription.get('status') != "active":
-            print(f"Invalid subscription status: {subscription.get('status')}")
-            raise HTTPException(status_code=400, detail="Subscription is not active")
+        # Check subscription status
+        if status not in ['created', 'authenticated', 'active']:
+            print(f"Invalid subscription status: {status}")
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid subscription status: {status}. Expected one of: created, authenticated, active"
+            )
 
         # Get plan details from subscription
         plan_id = subscription.get('plan_id')
@@ -155,7 +182,7 @@ async def verify_subscription(
             if plan_name:
                 break
 
-        subscription_end = datetime.fromtimestamp(subscription.get('current_end'))
+        subscription_end = datetime.fromtimestamp(subscription.get('current_end')) if subscription.get('current_end') else None
         user_id = current_user.get("_id")
 
         print(f"Updating user {user_id} with subscription details")
@@ -165,17 +192,28 @@ async def verify_subscription(
         result = await db["users"].update_one(
             {"_id": user_id},
             {"$set": {
-                "subscription_status": "active",
+                "subscription_status": status,
                 "subscription_id": request.subscription_id,
                 "subscription_plan": plan_name,
                 "subscription_type": billing_type,
-                "subscription_end_date": subscription_end
+                "subscription_end_date": subscription_end,
+                "payment_id": request.payment_id,
+                "last_subscription_update": datetime.utcnow()
             }}
         )
 
         if result.matched_count == 0:
             print(f"User not found in database: {user_id}")
             raise HTTPException(status_code=404, detail="User not found")
+
+        # If status is still 'created' after retries, return 202 Accepted
+        if status == 'created':
+            return {
+                "status": "pending",
+                "message": "Subscription is being processed. Please try again in a few seconds.",
+                "subscription_id": request.subscription_id,
+                "retry_after": 5
+            }, 202
 
         return {
             "status": "success", 
@@ -184,7 +222,8 @@ async def verify_subscription(
             "subscription_details": {
                 "plan": plan_name,
                 "type": billing_type,
-                "end_date": subscription_end
+                "end_date": subscription_end,
+                "status": status
             }
         }
 

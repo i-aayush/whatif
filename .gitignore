@@ -29,7 +29,6 @@ wheels/
 .installed.cfg
 *.egg
 backend/venv/
-
 # Testing
 /coverage
 
@@ -68,3 +67,6 @@ yarn-error.log*
 
 # Large binary files
 *.node
+
+frontend/playwright-report
+frontend/test-results
