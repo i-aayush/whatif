@@ -2,9 +2,52 @@
 
 import Link from 'next/link'
 import { useAuth } from '@/app/contexts/AuthContext'
+import { useRouter } from 'next/navigation'
+import { API_URL } from './config/config'
+import { toast } from 'react-hot-toast'
 
 function Navigation() {
-  const { user, logout } = useAuth();
+  const { user, logout, checkModelStatus } = useAuth();
+  const router = useRouter();
+
+  const handleGetStartedClick = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!user) {
+      router.push('/signup');
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      // Check subscription status
+      const response = await fetch(`${API_URL}/users/me/subscription`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch subscription status');
+      }
+
+      const data = await response.json();
+      
+      if (data.status === 'active') {
+        // If subscription is active, redirect to canvas
+        router.push('/canvas');
+      } else {
+        // If no active subscription, redirect to pricing
+        router.push('/pricing');
+      }
+    } catch (error) {
+      console.error('Error checking subscription:', error);
+      router.push('/pricing');
+    }
+  };
 
   return (
     <nav className="mx-auto px-4 sm:px-6 lg:px-8 bg-white/80 backdrop-blur-md dark:bg-gray-900/80 border-b border-gray-200/50 dark:border-gray-700/50">
@@ -30,12 +73,13 @@ function Navigation() {
             >
               WhatIf Examples
             </Link>
-            <Link 
-              href="/signup" 
+            <a 
+              href="#"
+              onClick={handleGetStartedClick}
               className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white inline-flex items-center px-1 pt-1 text-sm font-medium"
             >
               Get Started
-            </Link>
+            </a>
           </div>
         </div>
         <div className="flex items-center space-x-4">
@@ -78,19 +122,8 @@ export default function ClientLayout({
 }) {
   return (
     <>
-      <header className="fixed w-full top-0 z-50">
-        <Navigation />
-      </header>
-      <main className="flex-grow pt-16">
-        {children}
-      </main>
-      <footer className="bg-gray-100">
-        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          <p className="text-center text-gray-500 text-sm">
-            © 2025 WhatIf. All rights reserved.
-          </p>
-        </div>
-      </footer>
+      <Navigation />
+      {children}
     </>
   )
 } 

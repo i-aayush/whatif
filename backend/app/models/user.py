@@ -14,8 +14,13 @@ PyObjectId = Annotated[
 class UserBase(BaseModel):
     email: EmailStr
     full_name: str
-    age: int = Field(ge=0, le=120)
-    gender: Literal["male", "female", "other"]
+    age: Optional[int] = Field(ge=0, le=120, default=None)
+    gender: Optional[Literal["male", "female", "other", "not_specified"]] = "not_specified"
+    auth_provider: Optional[Literal["email", "google"]] = "email"
+    picture_url: Optional[str] = None
+    locale: Optional[str] = None
+    given_name: Optional[str] = None
+    family_name: Optional[str] = None
 
 class UserCreate(UserBase):
     password: str
@@ -45,3 +50,5 @@ class UserResponse(BaseModel):
     email: str
     full_name: str
     token: str
+    auth_provider: Optional[str] = None
+    picture_url: Optional[str] = None

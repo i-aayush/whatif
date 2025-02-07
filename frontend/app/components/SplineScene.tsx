@@ -18,8 +18,8 @@ export default function SplineScene() {
           style={{ 
             width: '100%',
             height: '100%',
-            maxHeight: '90vh',
-            transform: 'scale(1.2)',
+            // maxHeight: '90vh',
+            // transform: 'scale(1.2)',
           }}
         />
       </div>

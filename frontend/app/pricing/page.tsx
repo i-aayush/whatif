@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import Script from 'next/script';
 import Link from 'next/link';
 import { API_URL } from '../config/config';
+import { toast } from 'react-hot-toast';
 
 interface PricingPlan {
   name: string;
@@ -22,7 +23,7 @@ const pricingPlans = {
       features: [
         'Take 50 AI Photos (credits)',
         'Create 1 AI Model per month',
-        'Flux™ 1.1 photorealistic model',
+        'WhatIf AI photorealistic model',
         'Low quality photos',
       ],
     },
@@ -32,7 +33,7 @@ const pricingPlans = {
       features: [
         'Take 1,000 AI Photos (credits)',
         'Create 3 AI Models per month',
-        'Flux™ 1.1 photorealistic model',
+        'WhatIf AI photorealistic model',
         'Medium quality photos',
       ],
     },
@@ -42,7 +43,7 @@ const pricingPlans = {
       features: [
         'Take 3,000 AI Photos (credits)',
         'Create 10 AI Models per month',
-        'Flux™ 1.1 photorealistic model',
+        'WhatIf AI photorealistic model',
         'High quality photos',
       ],
     },
@@ -149,8 +150,10 @@ export default function Pricing() {
             const verifyData = await verifyResponse.json();
             if (!verifyResponse.ok) throw new Error(verifyData.detail);
 
-            // Redirect to get-started page after successful payment
-            router.push('/get-started');
+            // Handle successful payment
+            toast.success('Payment successful! Welcome to WhatIf Pro.');
+            // Redirect to canvas page after successful payment
+            router.push('/canvas');
           } catch (error) {
             console.error('Payment verification failed:', error);
             alert('Payment verification failed. Please contact support.');
@@ -158,8 +161,7 @@ export default function Pricing() {
         },
         prefill: {
           name: user.full_name,
-          email: user.email,
-          contact: user.phone_number,
+          email: user.email
         },
         theme: {
           color: '#9333EA',

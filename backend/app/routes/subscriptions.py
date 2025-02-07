@@ -15,7 +15,6 @@ router = APIRouter()
 
 # Initialize Razorpay client
 client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
-
 # Define request models
 class SubscriptionRequest(BaseModel):
     plan_name: str
@@ -48,8 +47,28 @@ async def create_subscription(
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     try:
+        print(f"Creating subscription for user: {current_user.get('email')}")
+        print(f"Request data - Plan: {request.plan_name}, Billing: {request.billing_type}")
+        
+        print("Debug - Razorpay Configuration:")
+        print(f"Key ID length: {len(settings.RAZORPAY_KEY_ID) if settings.RAZORPAY_KEY_ID else 0}")
+        print(f"Key Secret length: {len(settings.RAZORPAY_KEY_SECRET) if settings.RAZORPAY_KEY_SECRET else 0}")
+        print(f"Key ID: {settings.RAZORPAY_KEY_ID}")
+        print(f"Key Secret: {settings.RAZORPAY_KEY_SECRET}")
+        
+        # Validate Razorpay credentials
+        if not settings.razorpay_credentials_valid:
+            print("Invalid Razorpay credentials configuration")
+            raise HTTPException(
+                status_code=500,
+                detail="Payment service configuration error. Please contact support."
+            )
+        
         plan_id = PLAN_IDS.get(request.plan_name.lower(), {}).get(request.billing_type.lower())
+        print(f"Selected plan_id: {plan_id}")
+        
         if not plan_id:
+            print(f"Invalid plan configuration - plan_name: {request.plan_name}, billing_type: {request.billing_type}")
             raise HTTPException(status_code=400, detail="Invalid plan configuration")
 
         subscription_data = {
@@ -62,8 +81,16 @@ async def create_subscription(
                 "email": current_user.get('email')
             }
         }
+        print(f"Subscription data being sent to Razorpay: {subscription_data}")
 
+        print(f"Razorpay client config - Key ID: {settings.RAZORPAY_KEY_ID}")
+        print(f"Initializing Razorpay client with auth: ({settings.RAZORPAY_KEY_ID[:6]}..., {settings.RAZORPAY_KEY_SECRET[:6]}...)")
+        
+        # Reinitialize client with current settings
+        client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
         subscription = client.subscription.create(data=subscription_data)
+        print(f"Razorpay response: {subscription}")
+
         return {
             "subscription_id": subscription.get('id'),
             "key_id": settings.RAZORPAY_KEY_ID,
@@ -75,8 +102,11 @@ async def create_subscription(
         }
 
     except razorpay.errors.BadRequestError as e:
+        print(f"Razorpay BadRequestError: {str(e)}")
         raise HTTPException(status_code=400, detail=f"Razorpay error: {str(e)}")
     except Exception as e:
+        print(f"Unexpected error during subscription creation: {str(e)}")
+        print(f"Error type: {type(e)}")
         raise HTTPException(status_code=400, detail=f"Subscription creation failed: {str(e)}")
 
 @router.post("/verify-subscription")
@@ -86,6 +116,9 @@ async def verify_subscription(
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
     try:
+        print(f"Verifying subscription for user: {current_user.get('email')}")
+        print(f"Verification request data: {request}")
+        
         # Verify the payment signature
         expected_signature = hmac.new(
             settings.RAZORPAY_KEY_SECRET.encode(),
@@ -94,11 +127,18 @@ async def verify_subscription(
         ).hexdigest()
 
         if expected_signature != request.signature:
+            print("Signature verification failed")
+            print(f"Expected: {expected_signature}")
+            print(f"Received: {request.signature}")
             raise HTTPException(status_code=400, detail="Invalid payment signature")
 
         # Verify subscription status
+        print("Fetching subscription details from Razorpay")
         subscription = client.subscription.fetch(request.subscription_id)
+        print(f"Subscription details: {subscription}")
+        
         if subscription.get('status') != "active":
+            print(f"Invalid subscription status: {subscription.get('status')}")
             raise HTTPException(status_code=400, detail="Subscription is not active")
 
         # Get plan details from subscription
@@ -118,6 +158,9 @@ async def verify_subscription(
         subscription_end = datetime.fromtimestamp(subscription.get('current_end'))
         user_id = current_user.get("_id")
 
+        print(f"Updating user {user_id} with subscription details")
+        print(f"Plan: {plan_name}, Type: {billing_type}, End date: {subscription_end}")
+
         # Update user's subscription status in database
         result = await db["users"].update_one(
             {"_id": user_id},
@@ -131,6 +174,7 @@ async def verify_subscription(
         )
 
         if result.matched_count == 0:
+            print(f"User not found in database: {user_id}")
             raise HTTPException(status_code=404, detail="User not found")
 
         return {
@@ -147,4 +191,6 @@ async def verify_subscription(
     except HTTPException:
         raise
     except Exception as e:
+        print(f"Unexpected error during subscription verification: {str(e)}")
+        print(f"Error type: {type(e)}")
         raise HTTPException(status_code=400, detail=str(e)) 

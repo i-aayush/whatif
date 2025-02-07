@@ -1,26 +1,72 @@
 'use client';
 
+import { useState } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import toast from 'react-hot-toast';
+import RazorpayButton from './RazorpayButton';
 import Link from 'next/link';
 
 const pricingPlans = [
   {
-    name: 'Basic',
-    price: 9.99,
-    features: ['10 AI-generated images per month', 'Basic editing tools', 'Email support'],
+    id: 'starter',
+    name: 'Starter',
+    monthlyPrice: 1999,
+    yearlyPrice: 9999,
+    features: [
+      '100 AI-generated images per month',
+      'Basic editing tools',
+      'Email support',
+      'Access to basic models'
+    ],
   },
   {
+    id: 'pro',
     name: 'Pro',
-    price: 19.99,
-    features: ['50 AI-generated images per month', 'Advanced editing tools', 'Priority email support'],
+    monthlyPrice: 3999,
+    yearlyPrice: 19999,
+    features: [
+      'Unlimited AI-generated images',
+      'Advanced editing tools',
+      'Priority email support',
+      'Access to all models',
+      'Custom model training'
+    ],
   },
   {
-    name: 'Enterprise',
-    price: 49.99,
-    features: ['Unlimited AI-generated images', 'Full suite of editing tools', '24/7 priority support'],
+    id: 'premium',
+    name: 'Premium',
+    monthlyPrice: 8999,
+    yearlyPrice: 49999,
+    features: [
+      'Everything in Pro',
+      'Dedicated support',
+      'API access',
+      'Multiple custom models',
+      'Advanced analytics'
+    ],
   },
 ];
 
 export default function PricingSection() {
+  const { isAuthenticated } = useAuth();
+  const [billingType, setBillingType] = useState<'monthly' | 'yearly'>('monthly');
+
+  const handleSuccess = () => {
+    toast.success('Your subscription has been activated.');
+  };
+
+  const handleError = (error: string) => {
+    toast.error(error);
+  };
+
+  const formatPrice = (price: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 0
+    }).format(price);
+  };
+
   return (
     <div id="pricing" className="py-24 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -29,19 +75,46 @@ export default function PricingSection() {
             Simple, Transparent Pricing
           </h2>
           <p className="text-xl text-gray-500">Choose the plan that's right for you</p>
+          
+          <div className="mt-6 flex justify-center">
+            <div className="relative bg-gray-100 p-0.5 rounded-lg inline-flex">
+              <button
+                onClick={() => setBillingType('monthly')}
+                className={`${
+                  billingType === 'monthly'
+                    ? 'bg-white shadow-sm'
+                    : 'hover:bg-gray-50'
+                } relative px-4 py-2 rounded-md text-sm font-medium transition-all duration-200`}
+              >
+                Monthly
+              </button>
+              <button
+                onClick={() => setBillingType('yearly')}
+                className={`${
+                  billingType === 'yearly'
+                    ? 'bg-white shadow-sm'
+                    : 'hover:bg-gray-50'
+                } relative px-4 py-2 rounded-md text-sm font-medium transition-all duration-200`}
+              >
+                Yearly (Save 50%)
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="mt-16 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:gap-8">
           {pricingPlans.map((plan) => (
             <div
-              key={plan.name}
+              key={plan.id}
               className="bg-white rounded-lg shadow-lg divide-y divide-gray-200"
             >
               <div className="p-6">
                 <h3 className="text-2xl font-semibold text-gray-900">{plan.name}</h3>
                 <p className="mt-4">
-                  <span className="text-4xl font-extrabold text-gray-900">${plan.price}</span>
-                  <span className="text-base font-medium text-gray-500">/month</span>
+                  <span className="text-4xl font-extrabold text-gray-900">
+                    {formatPrice(billingType === 'monthly' ? plan.monthlyPrice : plan.yearlyPrice)}
+                  </span>
+                  <span className="text-base font-medium text-gray-500">/{billingType}</span>
                 </p>
                 <ul className="mt-6 space-y-4">
                   {plan.features.map((feature) => (
@@ -66,12 +139,21 @@ export default function PricingSection() {
                   ))}
                 </ul>
                 <div className="mt-8">
-                  <Link
-                    href="/get-started"
-                    className="w-full inline-flex justify-center py-3 px-5 border border-transparent rounded-md text-base font-medium text-white bg-indigo-600 hover:bg-indigo-700"
-                  >
-                    Get started with {plan.name}
-                  </Link>
+                  {isAuthenticated ? (
+                    <RazorpayButton
+                      plan={plan.id}
+                      billingType={billingType}
+                      onSuccess={handleSuccess}
+                      onError={handleError}
+                    />
+                  ) : (
+                    <Link
+                      href="/login"
+                      className="inline-flex items-center justify-center w-full px-6 py-3 text-base font-medium text-white bg-gradient-to-r from-purple-500 via-pink-500 to-red-500 border border-transparent rounded-md shadow-sm hover:from-purple-600 hover:via-pink-600 hover:to-red-600"
+                    >
+                      Login to Subscribe
+                    </Link>
+                  )}
                 </div>
               </div>
             </div>

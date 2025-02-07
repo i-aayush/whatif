@@ -1,7 +1,12 @@
 const nextConfig = {
     reactStrictMode: true,
     images: {
-      domains: ['hebbkx1anhila5yf.public.blob.vercel-storage.com', 'whatif-genai.s3.amazonaws.com'],
+      domains: [
+        'hebbkx1anhila5yf.public.blob.vercel-storage.com', 
+        'whatif-genai.s3.amazonaws.com',
+        'whatif-genai.s3.us-east-1.amazonaws.com',
+        'replicate.delivery'
+      ],
       remotePatterns: [
         {
           protocol: 'https',
@@ -15,16 +20,30 @@ const nextConfig = {
           port: '',
           pathname: '/**',
         },
+        {
+          protocol: 'https',
+          hostname: 'whatif-genai.s3.us-east-1.amazonaws.com',
+          port: '',
+          pathname: '/**',
+        },
+        {
+          protocol: 'https',
+          hostname: 'replicate.delivery',
+          port: '',
+          pathname: '/**',
+        }
       ],
     },
-        rewrites: async () => {
-            return [
-                {
-                    source: '/api/:path*',
-                    destination: '/api/:path*'
-                }
-            ];
-        },
+    async rewrites() {
+      return [
+        {
+          source: '/api/:path*',
+          destination: process.env.NODE_ENV === 'development'
+            ? 'http://127.0.0.1:8000/api/:path*' // Development API URL
+            : '/api/:path*' // Production API URL (handled by Vercel)
+        }
+      ]
+    },
  
     experimental: {
       optimizeCss: true,

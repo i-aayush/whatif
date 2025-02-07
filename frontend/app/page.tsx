@@ -10,6 +10,11 @@ import 'swiper/css/navigation';
 import 'swiper/css/pagination';
 // import 'swiper/swiper-bundle.min.css';
 import { useAuth } from './contexts/AuthContext';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { API_URL } from './config/config';
+import GoogleButton from './components/GoogleButton';
+import { CAROUSEL_IMAGES, PLACEHOLDER_IMAGE } from './constants/images';
 
 const Spline = dynamic(() => import('@splinetool/react-spline'), {
   ssr: false,
@@ -26,7 +31,7 @@ const testimonials = [
     purchase: '✔ VERIFIED PURCHASE',
     rating: 5,
     feedback:
-      'WhatIf is a game-changer! I used it to reimagine my travel photos, and the results were incredible. The AI created artistic variations that looked straight out of a professional editor’s studio!',
+      'WhatIf is a game-changer! I used it to reimagine my travel photos, and the results were incredible. The AI created artistic variations that looked straight out of a professional editors studio!',
   },
   {
     name: 'Priya Mehta',
@@ -54,28 +59,15 @@ const testimonials = [
     purchase: '✔ VERIFIED PURCHASE',
     rating: 4,
     feedback:
-      'Great product! I used WhatIf to enhance my old photos, and the results were outstanding. It’s intuitive and easy to use. A little tweaking is needed sometimes, but it’s worth it!',
+      "Great product! I used WhatIf to enhance my old photos, and the results were outstanding. It's intuitive and easy to use. A little tweaking is needed sometimes, but it's worth it!",
   },
   {
     name: 'Aakansha Nag',
     purchase: '✔ VERIFIED PURCHASE',
     rating: 3,
     feedback:
-      'Early product, but it has potential. I used it to create unique edits for my Instagram, and the results were decent. The AI could use more training to improve its accuracy.',
+      "Early product, but it has potential. I used it to create unique edits for my Instagram, and the results were decent. The AI could use more training to improve its accuracy.",
   },
-];
-
-const exampleImages = [
-  'https://replicate.delivery/czjl/45u7FCzvbU4iFxEGRJ118utg1inYqsPemFtwtPvdBtpn7bCKA/tmp1ckqay7a.jpg',
-  'https://replicate.delivery/czjl/FCDm4HKdu86yN9iC6H2IeKG5CO81ZZnbrWi6sph5ref4svJoA/tmpgozxzev7.jpg',
-  'https://replicate.delivery/czjl/AfaxgE6W0pUeRUS0znWuuqJ3uuHozxsGrVAiRHLq1tHB53EUA/tmpc9l8mw43.jpg',
-  'https://replicate.delivery/czjl/cONRAUa9fv27di8Jstr1KffJVcVSpvIORnKIK1PGB24DpvJoA/tmp6os8pte8.jpg',
-  'https://replicate.delivery/czjl/S5FaUpztxnIHExzTeJ8XkrQLjJlblaJWrsUWQQvkpMC98bCKA/tmp2j3qdd9y.jpg',
-  'https://replicate.delivery/xezq/IDnHpRv5MIbQLtB4njXrW7d3BMqZfkUeyVyUEUFtjAflLwJoA/out-1.png',
-  'https://replicate.delivery/czjl/nYzcWtCpzr4uIV3HVX4Ie6BZTwYaHcBwXuOrFMrEqWu55bCKA/tmpvei9fste.jpg',
-  'https://replicate.delivery/czjl/mUfh1mnpreujVUpqbcrnFPHhwTM9dffVwRRyKgNfNRvq6AngC/tmpjaqkg921.png',  
-
-
 ];
 
 const styles = `
@@ -84,12 +76,41 @@ const styles = `
       transform: translateX(0);
     }
     100% {
-      transform: translateX(-100%);
+      transform: translateX(calc(-300px * ${CAROUSEL_IMAGES.length}));
     }
   }
   
   .animate-scroll {
-    animation: scroll 120s linear infinite;
+    animation: scroll 40s linear infinite;
+  }
+
+  .animate-scroll:hover {
+    animation-play-state: paused;
+  }
+
+  .image-container {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .image-container::before,
+  .image-container::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    width: 200px;
+    height: 100%;
+    z-index: 2;
+  }
+
+  .image-container::before {
+    left: 0;
+    background: linear-gradient(to right, white, transparent);
+  }
+
+  .image-container::after {
+    right: 0;
+    background: linear-gradient(to left, white, transparent);
   }
 `;
 
@@ -98,6 +119,63 @@ const StyleSheet = () => (
     {styles}
   </style>
 );
+
+const CanvasButton = () => {
+  const router = useRouter();
+  const { setUser } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleCanvasClick = async () => {
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        router.push('/login');
+        return;
+      }
+      const response = await fetch(`${API_URL}/users/me`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        setUser(userData);
+        router.push('/canvas');
+      } else {
+        console.error('Error:', response.statusText);
+        router.push('/login');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      router.push('/login');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleCanvasClick}
+      disabled={isLoading}
+      className="px-6 py-3 bg-gradient-to-r from-purple-500 via-pink-500 to-red-500 text-white rounded-md text-lg font-medium shadow-lg transition-transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+    >
+      {isLoading ? (
+        <div className="flex items-center">
+          <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          Loading...
+        </div>
+      ) : (
+        'Go to Canvas'
+      )}
+    </button>
+  );
+};
 
 export default function Home() {
   const { user } = useAuth();
@@ -125,19 +203,33 @@ export default function Home() {
             <p className="text-lg text-white/80 mb-8 ">
               Upload your photos and let our AI create stunning variations.
             </p>
-            <div className="flex gap-4 justify-center">
-              <Link
-                href="/signup"
-                className="px-6 py-3 bg-gradient-to-r from-purple-500 via-pink-500 to-red-500 text-white rounded-md text-lg font-medium shadow-lg transition-transform hover:scale-105"
-              >
-                Get Started
-              </Link>
+            {/* <div className="flex gap-4 justify-center">
+              {!user ? (
+                <Link
+                  href="/auth"
+                  className="px-6 py-3 bg-gradient-to-r from-purple-500 via-pink-500 to-red-500 text-white rounded-md text-lg font-medium shadow-lg transition-transform hover:scale-105"
+                >
+                  Get Started
+                </Link>
+              ) : (
+                <StudioButton />
+              )}
               <Link
                 href="/pricing"
                 className="px-6 py-3 bg-gradient-to-r from-purple-500 via-pink-500 to-red-500 text-white rounded-md text-lg font-medium shadow-lg transition-transform hover:scale-105"
               >
                 View Pricing
               </Link>
+            </div> */}
+            <div className="mt-6 max-w-sm mx-auto">
+              {user ? (
+                <CanvasButton />
+              ) : (
+                <GoogleButton 
+                  text="Sign up with Google" 
+                  className="px-6 py-3 bg-gradient-to-r from-purple-500 via-pink-500 to-red-500 text-white rounded-md text-lg font-medium shadow-lg transition-transform hover:scale-105" 
+                />
+              )}
             </div>
           </div>
         </div>
@@ -156,44 +248,62 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="w-full overflow-hidden">
+        <div className="w-full overflow-hidden image-container">
           <div className="flex gap-8 animate-scroll">
             {/* First set of images */}
-            {exampleImages.map((image, index) => (
+            {CAROUSEL_IMAGES.map((image, index) => (
               <div 
                 key={`first-${index}`} 
-                className="flex-none w-[300px] h-[500px] rounded-2xl overflow-hidden"
+                className="flex-none w-[300px] h-[500px] rounded-2xl overflow-hidden shadow-lg transform transition-transform hover:scale-105"
               >
                 <img
                   src={image}
                   alt={`Example ${index + 1}`}
                   className="w-full h-full object-cover"
+                  loading="lazy"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.src = PLACEHOLDER_IMAGE;
+                    target.onerror = null;
+                  }}
                 />
               </div>
             ))}
             {/* Duplicate set for seamless loop */}
-            {exampleImages.map((image, index) => (
+            {CAROUSEL_IMAGES.map((image, index) => (
               <div 
                 key={`second-${index}`} 
-                className="flex-none w-[300px] h-[500px] rounded-2xl overflow-hidden"
+                className="flex-none w-[300px] h-[500px] rounded-2xl overflow-hidden shadow-lg transform transition-transform hover:scale-105"
               >
                 <img
                   src={image}
                   alt={`Example ${index + 1}`}
                   className="w-full h-full object-cover"
+                  loading="lazy"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.src = PLACEHOLDER_IMAGE;
+                    target.onerror = null;
+                  }}
                 />
               </div>
             ))}
-            {/* Another duplicate set */}
-            {exampleImages.map((image, index) => (
+            {/* Third set for extra smoothness */}
+            {CAROUSEL_IMAGES.map((image, index) => (
               <div 
                 key={`third-${index}`} 
-                className="flex-none w-[300px] h-[500px] rounded-2xl overflow-hidden"
+                className="flex-none w-[300px] h-[500px] rounded-2xl overflow-hidden shadow-lg transform transition-transform hover:scale-105"
               >
                 <img
                   src={image}
                   alt={`Example ${index + 1}`}
                   className="w-full h-full object-cover"
+                  loading="lazy"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.src = PLACEHOLDER_IMAGE;
+                    target.onerror = null;
+                  }}
                 />
               </div>
             ))}

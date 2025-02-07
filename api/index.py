@@ -2,17 +2,91 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.server_api import ServerApi
-from mangum import Mangum
-from http.server import BaseHTTPRequestHandler
-from contextlib import asynccontextmanager
-from datetime import datetime
-from urllib.parse import parse_qs, unquote
 import sys
 import os
-import json
+import logging
+from http.server import BaseHTTPRequestHandler
+from mangum import Mangum
 import asyncio
+import traceback
+from datetime import datetime
+from contextlib import asynccontextmanager
+from backend.app.routes import auth, users, photos, generated_images, subscriptions, training, canvas_inference
+from backend.app.config.config import settings
+from starlette.middleware.sessions import SessionMiddleware
+import secrets
 
-# ============= MongoDB Configuration =============
+# Set up file logging
+log_file = '/tmp/api.log'
+os.makedirs(os.path.dirname(log_file), exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file, mode='a'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
+def log_exception(e: Exception, context: str = ""):
+    """Helper function to log exceptions with full details"""
+    logger.error(f"Exception in {context}: {str(e)}")
+    logger.error(f"Exception type: {type(e)}")
+    logger.error(f"Exception args: {e.args}")
+    logger.error(f"Traceback:\n{traceback.format_exc()}")
+
+# Log startup information
+try:
+    logger.info("="*50)
+    logger.info(f"Starting application at {datetime.now()}")
+    logger.info(f"Python version: {sys.version}")
+    logger.info(f"Current working directory: {os.getcwd()}")
+    logger.info(f"Directory contents: {os.listdir('.')}")
+    logger.info(f"Environment variables: {dict(os.environ)}")
+except Exception as e:
+    log_exception(e, "startup logging")
+
+try:
+    # Add the backend directory to Python path
+    backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    sys.path.append(backend_dir)
+    logger.info(f"Added {backend_dir} to Python path")
+    logger.info(f"Current Python path: {sys.path}")
+    
+    from backend.app.config import settings
+    logger.info("Successfully imported backend modules")
+except Exception as e:
+    log_exception(e, "backend imports")
+    raise
+
+# Initialize FastAPI
+app = FastAPI(title="WhatIf API",root_path="/api")
+
+# Generate a secure session key if not provided in environment
+SESSION_SECRET = os.environ.get('SESSION_SECRET', secrets.token_urlsafe(32))
+
+# Add SessionMiddleware with secure configuration
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SESSION_SECRET,
+    session_cookie="whatif_session",    # Custom cookie name
+    max_age=3600,                       # 1 hour session timeout
+    same_site="lax",                    # Prevents CSRF while allowing OAuth
+    https_only=settings.ENVIRONMENT == "production",  # HTTPS only in production
+    path="/api/",                       # Restrict cookie to API paths
+)
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
+
+#MongoDB client as a global variable
 mongodb_client = None
 mongodb = None
 
@@ -21,37 +95,34 @@ async def get_db_context():
     """Async context manager for MongoDB connection"""
     global mongodb_client, mongodb
     try:
-        if mongodb_client is None:
-            mongodb_client = AsyncIOMotorClient(
-                settings.MONGODB_URI,
-                server_api=ServerApi('1'),
-                tlsAllowInvalidCertificates=True
-            )
-            await mongodb_client.admin.command('ping')
-            mongodb = mongodb_client[settings.DB_NAME]
-        yield mongodb
+        # Always create a new client for each request in serverless environment
+        logger.info("Creating MongoDB connection")
+        client = AsyncIOMotorClient(
+            settings.MONGODB_URI,
+            server_api=ServerApi('1'),
+            tlsAllowInvalidCertificates=True,
+            serverSelectionTimeoutMS=50000,
+            connectTimeoutMS=50000,
+            socketTimeoutMS=50000
+        )
+        
+        # Verify the connection
+        await client.admin.command('ping')
+        logger.info("Successfully connected to MongoDB!")
+        
+        db = client[settings.DB_NAME]
+        yield db
+        
     except Exception as e:
+        logger.error(f"MongoDB connection error: {str(e)}")
         raise
     finally:
-        pass
+        # Always close the client after the request in serverless
+        if client:
+            client.close()
+            logger.info("Closed MongoDB connection")
 
-# ============= Backend Setup =============
-backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(backend_dir)
-from backend.app.config import settings
-from backend.app.routes import auth, users, photos, generated_images, subscriptions, training
-
-# ============= FastAPI Application =============
-app = FastAPI(title="WhatIf API")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
+# Dependency to inject MongoDB into requests
 @app.middleware("http")
 async def db_session_middleware(request: Request, call_next):
     async with get_db_context() as db:
@@ -59,6 +130,11 @@ async def db_session_middleware(request: Request, call_next):
         response = await call_next(request)
         return response
 
+async def get_mongodb():
+    """Get MongoDB connection, creating it if necessary"""
+    async with get_db_context() as db:
+        return db
+    
 # Include routers
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(users.router, prefix="/users", tags=["users"])
@@ -66,58 +142,122 @@ app.include_router(photos.router, prefix="/photos", tags=["photos"])
 app.include_router(generated_images.router, prefix="/generated-images", tags=["generated-images"])
 app.include_router(subscriptions.router, prefix="/subscriptions", tags=["subscriptions"])
 app.include_router(training.router, prefix="/training", tags=["training"])
+app.include_router(canvas_inference.router, prefix="/canvasinference", tags=["canvasinference"])
+
 
 @app.get("/")
 async def root():
+    logger.info("Handling root request")
     return {"message": "Welcome to WhatIf API"}
 
-# ============= Vercel Handler =============
+@app.get("/debug/logs")
+async def get_logs():
+    """Endpoint to retrieve application logs"""
+    logger.info("Retrieving application logs")
+    try:
+        if os.path.exists(log_file):
+            with open(log_file, 'r') as f:
+                logs = f.read()
+            logger.info(f"Successfully read logs, size: {len(logs)} bytes")
+            return {"logs": logs}
+        else:
+            logger.warning(f"Log file not found at {log_file}")
+            return {"error": "Log file not found", "path": log_file}
+    except Exception as e:
+        log_exception(e, "retrieving logs")
+        return {"error": str(e), "traceback": traceback.format_exc()}
+
+# Create Mangum handler with custom settings
+try:
+    mangum_handler = Mangum(app, lifespan="off")
+    logger.info("Created Mangum handler successfully")
+except Exception as e:
+    log_exception(e, "creating Mangum handler")
+    raise
+
+# Create Vercel handler
 class Handler(BaseHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        try:
+            logger.info("Starting handler initialization")
+            super().__init__(*args, **kwargs)
+            logger.info("Handler initialization completed successfully")
+        except Exception as e:
+            log_exception(e, "handler initialization")
+            raise
+
     def _send_cors_headers(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-        self.send_header("Access-Control-Max-Age", "600")
-        self.send_header("Content-Type", "application/json")
+        try:
+            logger.debug("Sending CORS headers")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+            self.send_header("Access-Control-Max-Age", "600")
+            self.send_header("Content-Type", "application/json")
+            logger.debug("CORS headers sent successfully")
+        except Exception as e:
+            log_exception(e, "sending CORS headers")
+            raise
 
     def do_OPTIONS(self):
-        self.send_response(200)
-        self._send_cors_headers()
-        self.end_headers()
+        try:
+            logger.info(f"Handling OPTIONS request to {self.path}")
+            self.send_response(200)
+            self._send_cors_headers()
+            self.end_headers()
+            logger.info("OPTIONS request handled successfully")
+        except Exception as e:
+            log_exception(e, "handling OPTIONS request")
+            raise
 
-    def do_GET(self): self._handle_request()
-    def do_POST(self): self._handle_request()
-    def do_PUT(self): self._handle_request()
-    def do_DELETE(self): self._handle_request()
+    def do_GET(self):
+        try:
+            logger.info(f"Handling GET request to {self.path}")
+            self._handle_request()
+        except Exception as e:
+            log_exception(e, "handling GET request")
+            raise
+
+    def do_POST(self):
+        try:
+            logger.info(f"Handling POST request to {self.path}")
+            self._handle_request()
+        except Exception as e:
+            log_exception(e, "handling POST request")
+            raise
+
+    def do_PUT(self):
+        try:
+            logger.info(f"Handling PUT request to {self.path}")
+            self._handle_request()
+        except Exception as e:
+            log_exception(e, "handling PUT request")
+            raise
+
+    def do_DELETE(self):
+        try:
+            logger.info(f"Handling DELETE request to {self.path}")
+            self._handle_request()
+        except Exception as e:
+            log_exception(e, "handling DELETE request")
+            raise
 
     def _handle_request(self):
+        request_id = datetime.now().strftime('%Y%m%d%H%M%S%f')
+        logger.info(f"[{request_id}] ===== Starting {self.command} request to {self.path} =====")
         try:
-            # Parse request
+            # Read request details
+            content_length = int(self.headers.get("content-length", 0))
+            body = self.rfile.read(content_length).decode() if content_length > 0 else ""
             path_parts = self.path.split('?', 1)
             path = path_parts[0]
             query_string = path_parts[1] if len(path_parts) > 1 else ""
-            query_params = parse_qs(query_string)
-
-            # Read and parse body
-            content_length = int(self.headers.get("content-length", 0))
-            body = self.rfile.read(content_length).decode() if content_length > 0 else ""
             
-            content_type = self.headers.get("content-type", "")
-            if content_type == "application/json" and body:
-                try:
-                    body = json.loads(body)
-                except json.JSONDecodeError:
-                    body = {}
-            elif content_type == "application/x-www-form-urlencoded" and body:
-                form_data = {}
-                form_pairs = body.split('&')
-                for pair in form_pairs:
-                    if '=' in pair:
-                        key, value = pair.split('=', 1)
-                        form_data[unquote(key)] = unquote(value)
-                body = form_data
+            # Log request details
+            logger.info(f"[{request_id}] Path: {path}")
+            logger.info(f"[{request_id}] Body: {body}")
 
-            # Construct API Gateway event
+            # Construct event for Mangum
             raw_path = path[4:] if path.startswith('/api') else path
             event = {
                 "version": "2.0",
@@ -134,50 +274,39 @@ class Handler(BaseHTTPRequestHandler):
                         "userAgent": self.headers.get("user-agent", "")
                     }
                 },
-                "queryStringParameters": query_params if query_params else None,
-                "body": json.dumps(body) if body else None,
+                "body": body,
                 "isBase64Encoded": False
             }
 
-            # Create new event loop for each request
+            # Call the Mangum handler
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+            
             try:
-                response = loop.run_until_complete(mangum_handler(event, {}))
+                response = mangum_handler(event, {})
+                if asyncio.iscoroutine(response):
+                    response = loop.run_until_complete(response)
             finally:
                 loop.close()
+                asyncio.set_event_loop(None)
 
             # Send response
-            status_code = response.get("statusCode", 200)
-            self.send_response(status_code)
+            self.send_response(response.get("statusCode", 200))
             
             # Send headers
-            headers = response.get("headers", {})
-            for key, value in headers.items():
+            for key, value in response.get("headers", {}).items():
                 self.send_header(key, value)
             self._send_cors_headers()
             self.end_headers()
 
             # Send body
-            body = response.get("body", "")
-            if body:
-                if isinstance(body, str):
-                    try:
-                        json_body = json.loads(body)
-                        response_str = json.dumps(json_body)
-                    except json.JSONDecodeError:
-                        response_str = json.dumps({"message": body})
-                else:
-                    response_str = json.dumps(body)
-                self.wfile.write(response_str.encode())
+            if "body" in response:
+                self.wfile.write(response["body"].encode())
 
         except Exception as e:
-            error_response = {"detail": str(e)}
-            self.send_response(500)
-            self._send_cors_headers()
-            self.end_headers()
-            self.wfile.write(json.dumps(error_response).encode())
+            logger.error(f"Error handling request: {str(e)}")
+            logger.error(traceback.format_exc())
+            self.send_error(500, str(e))
 
-# Initialize handlers
-mangum_handler = Mangum(app, lifespan="off")
-handler = Handler
+# Create the handler instance
+handler = Handler 
