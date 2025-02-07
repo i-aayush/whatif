@@ -5,6 +5,7 @@ import { useAuth } from '@/app/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
 import { API_URL } from './config/config'
 import { toast } from 'react-hot-toast'
+import CreditDisplay from './components/CreditDisplay'
 
 function Navigation() {
   const { user, logout, checkModelStatus } = useAuth();
@@ -86,6 +87,7 @@ function Navigation() {
           {user ? (
             <div className="flex items-center space-x-4">
               <span className="text-sm text-gray-600 dark:text-gray-300">{user.full_name}</span>
+              <CreditDisplay credits={user.credits} />
               <button
                 onClick={logout}
                 className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white px-3 py-2 rounded-md text-sm font-medium"

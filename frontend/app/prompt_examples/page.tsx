@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { useInView } from 'react-intersection-observer';
+
 const ImageGallery: React.FC = () => {
   const imageUrls = [
     'https://whatif-genai.s3.amazonaws.com/prompt_images/IaGGAJx.jpeg',
@@ -35,37 +37,41 @@ const ImageGallery: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isZoomed, setIsZoomed] = useState(true);
-  const loadMoreRef = useRef<HTMLDivElement>(null);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const ITEMS_PER_PAGE = 10;
 
   // Function to load more images
-  const loadMoreImages = () => {
-    if (isLoading) return;
+  const loadMoreImages = useCallback(() => {
+    if (isLoading || !hasMore) return;
     setIsLoading(true);
     
-    setTimeout(() => {
-      setDisplayedImages(prev => [...prev, ...imageUrls]);
-      setIsLoading(false);
-    }, 500);
-  };
+    const startIndex = currentPage * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    const newImages = imageUrls.slice(startIndex, endIndex);
+    
+    if (newImages.length > 0) {
+      setDisplayedImages(prev => [...prev, ...newImages]);
+      setCurrentPage(prev => prev + 1);
+      setHasMore(endIndex < imageUrls.length);
+    } else {
+      setHasMore(false);
+    }
+    
+    setIsLoading(false);
+  }, [currentPage, isLoading, hasMore]);
+
+  // Intersection Observer for infinite scroll
+  const { ref: loadMoreRef, inView } = useInView({
+    threshold: 0.1,
+    rootMargin: '100px',
+  });
 
   useEffect(() => {
-    setDisplayedImages(imageUrls);
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          loadMoreImages();
-        }
-      },
-      { threshold: 0.1 }
-    );
-
-    if (loadMoreRef.current) {
-      observer.observe(loadMoreRef.current);
+    if (inView && hasMore) {
+      loadMoreImages();
     }
-
-    return () => observer.disconnect();
-  }, []);
+  }, [inView, loadMoreImages, hasMore]);
 
   useEffect(() => {
     const imageObserver = new IntersectionObserver(

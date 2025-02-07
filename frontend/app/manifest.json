@@ -1,0 +1,21 @@
+{
+  "name": "WhatIf AI",
+  "short_name": "WhatIf",
+  "description": "Create and train custom AI models for image generation",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "icons": [
+    {
+      "src": "https://whatif-genai.s3.us-east-1.amazonaws.com/examples/Image+07-02-25+at+5.27%E2%80%AFPM.jpeg",
+      "sizes": "192x192",
+      "type": "image/jpeg"
+    },
+    {
+      "src": "https://whatif-genai.s3.us-east-1.amazonaws.com/examples/Image+07-02-25+at+5.27%E2%80%AFPM.jpeg", 
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ]
+} 

@@ -7,6 +7,7 @@ import { API_URL } from '../config/config'
 import { generateOgImageUrl } from '../utils/og'
 import toast from 'react-hot-toast'
 import { useInView } from 'react-intersection-observer'
+import Image from 'next/image'
 
 interface FeedExample {
   _id: string
@@ -29,8 +30,10 @@ export default function FeedExamples({ onSelectImage, galleryView, onLike, isLik
   const [hasMore, setHasMore] = useState(true)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [initialLoadDone, setInitialLoadDone] = useState(false)
+  const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set())
 
-  // Intersection observer for infinite scrolling
+  // Intersection observer for infinite scrolling and initial load
   const { ref, inView } = useInView({
     threshold: 0,
     rootMargin: '100px',
@@ -62,6 +65,7 @@ export default function FeedExamples({ onSelectImage, galleryView, onLike, isLik
       setExamples(prev => [...prev, ...validExamples])
       setHasMore(data.has_more)
       setPage(prev => prev + 1)
+      setInitialLoadDone(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load examples')
       toast.error('Failed to load examples')
@@ -70,17 +74,12 @@ export default function FeedExamples({ onSelectImage, galleryView, onLike, isLik
     }
   }, [page, isLoading, hasMore])
 
-  // Load more when scrolling to bottom
+  // Load more when scrolling to bottom or on initial view
   useEffect(() => {
-    if (inView) {
+    if (inView && (!initialLoadDone || hasMore)) {
       fetchExamples()
     }
-  }, [inView, fetchExamples])
-
-  // Initial load
-  useEffect(() => {
-    fetchExamples()
-  }, [])
+  }, [inView, fetchExamples, initialLoadDone, hasMore])
 
   const handleShare = async (example: FeedExample, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -105,6 +104,11 @@ export default function FeedExamples({ onSelectImage, galleryView, onLike, isLik
       toast.error('Failed to share image');
     }
   };
+
+  // Function to handle image loading
+  const handleImageLoad = useCallback((imageUrl: string) => {
+    setLoadedImages(prev => new Set(prev).add(imageUrl))
+  }, [])
 
   if (error && examples.length === 0) {
     return (
@@ -145,23 +149,34 @@ export default function FeedExamples({ onSelectImage, galleryView, onLike, isLik
           <div className="aspect-square bg-gray-100 rounded-lg mb-4 relative group">
             {example.output_urls[0] && (
               <>
-                <img
-                  src={`${example.output_urls[0]}?w=300&h=300&fit=cover`}
-                  alt={example.prompt}
-                  className="w-full h-full object-cover rounded-lg"
-                  loading="lazy"
-                  data-src={example.output_urls[0]}
-                  onLoad={(e) => {
-                    const img = e.target as HTMLImageElement
-                    const fullResImage = new Image()
-                    fullResImage.src = img.dataset.src || ''
-                    fullResImage.onload = () => {
-                      img.src = fullResImage.src
-                      img.classList.add('opacity-100')
-                    }
-                    img.classList.add('opacity-0', 'transition-opacity', 'duration-300')
-                  }}
-                />
+                <div className="relative w-full h-0 pb-[100%]">
+                  <div className="absolute inset-0">
+                    <Image
+                      src={example.output_urls[0]}
+                      alt={example.prompt}
+                      className={`rounded-lg transition-opacity duration-300 ${
+                        loadedImages.has(example.output_urls[0]) ? 'opacity-100' : 'opacity-0'
+                      }`}
+                      fill
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                      quality={75}
+                      priority={index < 6}
+                      style={{
+                        objectFit: 'cover',
+                      }}
+                      onLoad={() => handleImageLoad(example.output_urls[0])}
+                    />
+                    <div 
+                      className={`absolute inset-0 bg-gray-200 rounded-lg transition-opacity duration-300 ${
+                        loadedImages.has(example.output_urls[0]) ? 'opacity-0' : 'opacity-100'
+                      }`}
+                    >
+                      <div className="h-full w-full flex items-center justify-center">
+                        <div className="w-6 h-6 border-2 border-gray-300 border-t-transparent rounded-full animate-spin"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
                 {/* Prompt Overlay */}
                 <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/50 to-transparent p-4 translate-y-2 opacity-0 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200">
                   <p className="text-white text-sm line-clamp-2">{example.prompt}</p>

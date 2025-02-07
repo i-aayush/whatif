@@ -19,6 +19,7 @@ interface AuthContextType {
   setUser: (user: User | null) => void
   isAuthenticated: boolean
   getSubscriptionStatus: () => Promise<any>
+  refreshCredits: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -133,11 +134,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [subscriptionCache]);
 
+  const refreshCredits = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token || !user) return;
+
+      const response = await fetch(`${API_URL}/credits/balance`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch credit balance');
+      }
+
+      const { balance } = await response.json();
+      setUser(prev => prev ? { ...prev, credits: balance } : null);
+      
+      // Update localStorage
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        const parsedUser = JSON.parse(storedUser);
+        localStorage.setItem('user', JSON.stringify({ ...parsedUser, credits: balance }));
+      }
+    } catch (error) {
+      console.error('Error fetching credits:', error);
+    }
+  }, [user]);
+
+  // Fetch credits on initial load and after login
+  useEffect(() => {
+    if (user) {
+      refreshCredits();
+    }
+  }, [user?._id]);
+
   const login = async (email: string, password: string) => {
     try {
       setIsLoading(true);
       
-      // Use getOrCreatePromise for login to prevent duplicate calls
       const loginPromise = getOrCreatePromise('login', async () => {
         const response = await fetch(`${API_URL}/auth/login`, {
           method: 'POST',
@@ -156,11 +192,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         const data = await response.json();
+        
+        // Fetch initial credit balance
+        const creditsResponse = await fetch(`${API_URL}/credits/balance`, {
+          headers: {
+            'Authorization': `Bearer ${data.token}`
+          }
+        });
+        
+        const { balance } = await creditsResponse.json();
+        
         const userData = { 
           _id: data._id,
           email: data.email, 
-          full_name: data.full_name 
+          full_name: data.full_name,
+          credits: balance
         };
+        
         setUser(userData);
         localStorage.setItem('user', JSON.stringify(userData));
         localStorage.setItem('token', data.token);
@@ -169,14 +217,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       await loginPromise;
 
-      // Only fetch subscription status, we don't need model status for routing
       const subscriptionData = await getSubscriptionStatus();
       return subscriptionData;
     } catch (error) {
       console.error('Login error:', error);
       throw error;
     } finally {
-      // Clear the login promise from pending promises
       setPendingPromises(prev => {
         const { login: _, ...rest } = prev;
         return rest;
@@ -208,11 +254,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const data = await response.json();
+      
+      // Fetch initial credit balance
+      const creditsResponse = await fetch(`${API_URL}/credits/balance`, {
+        headers: {
+          'Authorization': `Bearer ${data.token}`
+        }
+      });
+      
+      const { balance } = await creditsResponse.json();
+      
       const userData = { 
         _id: data._id,
         email: data.email, 
-        full_name: data.full_name 
+        full_name: data.full_name,
+        credits: balance
       };
+      
       setUser(userData);
       localStorage.setItem('user', JSON.stringify(userData));
       localStorage.setItem('token', data.token);
@@ -241,7 +299,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isLoading, 
       checkModelStatus, 
       getSubscriptionStatus,
-      setUser, 
+      setUser,
+      refreshCredits,
       isAuthenticated: !!user 
     }}>
       {children}

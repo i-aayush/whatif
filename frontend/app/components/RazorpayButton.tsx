@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import LoadingSpinner from './LoadingSpinner';
+import { type PricingPlan } from '../constants/pricing';
 
 interface RazorpayButtonProps {
-  plan: string;
-  billingType: string;
-  onSuccess?: () => void;
-  onError?: (error: string) => void;
+  plan: PricingPlan;
+  billingType: 'monthly' | 'yearly';
+  onSuccess: () => void;
+  onError: (error: string) => void;
 }
 
 declare global {
@@ -16,12 +17,7 @@ declare global {
   }
 }
 
-export default function RazorpayButton({ 
-  plan, 
-  billingType, 
-  onSuccess, 
-  onError 
-}: RazorpayButtonProps) {
+export default function RazorpayButton({ plan, billingType, onSuccess, onError }: RazorpayButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const { user } = useAuth();
@@ -40,7 +36,7 @@ export default function RazorpayButton({
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          plan_name: plan,
+          plan_name: plan.name,
           billing_type: billingType
         })
       });
@@ -57,7 +53,7 @@ export default function RazorpayButton({
         key: data.key_id,
         subscription_id: data.subscription_id,
         name: "WhatIf AI",
-        description: `${plan} Plan - ${billingType}`,
+        description: `${plan.name} Plan - ${billingType}`,
         handler: async function (response: any) {
           try {
             setIsVerifying(true);
@@ -82,14 +78,14 @@ export default function RazorpayButton({
             }
 
             // Handle success
-            onSuccess?.();
+            onSuccess();
             // Add a small delay before redirect for better UX
             setTimeout(() => {
               router.push('/canvas');
             }, 1500);
           } catch (error: any) {
             console.error('Payment verification error:', error);
-            onError?.(error.message || 'Payment verification failed');
+            onError(error.message || 'Payment verification failed');
           } finally {
             setIsVerifying(false);
           }
@@ -112,7 +108,7 @@ export default function RazorpayButton({
       razorpay.open();
     } catch (error: any) {
       console.error('Payment initiation error:', error);
-      onError?.(error.message || 'Failed to initiate payment');
+      onError(error.message || 'Failed to initiate payment');
       setIsLoading(false);
     }
   };

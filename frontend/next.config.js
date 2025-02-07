@@ -32,7 +32,7 @@ const nextConfig = {
           port: '',
           pathname: '/**',
         }
-      ],
+      ]
     },
     async rewrites() {
       return [

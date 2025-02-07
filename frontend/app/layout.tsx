@@ -1,6 +1,7 @@
 import './globals.css'
 import { Inter } from 'next/font/google'
 import AuthProvider from '@/app/contexts/AuthContext'
+import { ModalProvider } from './providers/ModalProvider'
 import ClientLayout from './ClientLayout'
 import { SpeedInsights } from "@vercel/speed-insights/next"
 import { Metadata } from 'next'
@@ -20,6 +21,17 @@ export const metadata: Metadata = {
   title: 'WhatIf AI - Unleash Your Imagination',
   description: 'Create and train custom AI models for image generation. Transform your ideas into reality with WhatIf AI.',
   metadataBase: new URL('https://whatif.ai'),
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: 'https://whatif-genai.s3.us-east-1.amazonaws.com/examples/Image+07-02-25+at+5.27%E2%80%AFPM.jpeg', type: 'image/jpeg', sizes: '32x32' },
+      { url: 'https://whatif-genai.s3.us-east-1.amazonaws.com/examples/Image+07-02-25+at+5.27%E2%80%AFPM.jpeg', type: 'image/jpeg', sizes: '192x192' }
+    ],
+    apple: [
+      { url: 'https://whatif-genai.s3.us-east-1.amazonaws.com/examples/Image+07-02-25+at+5.27%E2%80%AFPM.jpeg', sizes: '180x180', type: 'image/jpeg' }
+    ]
+  },
+  manifest: '/manifest.json',
   openGraph: {
     title: 'WhatIf - Unleash Your Imagination',
     description: 'Create and train custom AI models for image generation. Transform your ideas into reality with WhatIf AI.',
@@ -27,7 +39,7 @@ export const metadata: Metadata = {
     siteName: 'WhatIf AI',
     images: [
       {
-        url: 'https://whatif-genai.s3.us-east-1.amazonaws.com/prompt_images/07fd35e53b600eb4d1ba27186298c24acc2a26e206aee508dd13de55b9ebaeb6.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=ASIA2UC3B4NJZZIPNU3K%2F20250125%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20250125T100404Z&X-Amz-Expires=300&X-Amz-Security-Token=IQoJb3JpZ2luX2VjECIaCXVzLWVhc3QtMSJHMEUCIQChq6xDe28%2BTheMF56b45xJdTUsnl2GmgERh3Uw%2F1daRAIgXcnpJYtwcSDhyMHQBpKLxhIfu2j1HajdtXA5bP%2BZii0q6AIIKxAAGgw3MzAzMzU0MDQ4ODMiDAQOW9fbxiWxMMRMkyrFAtYHROpi8AjmavBwhxWVe3QAJwBTT9LzdFVzTiqmUsImHVSHB5KtgN7LNS5OWOngwGf%2FwNHGvy8OnAiH4qsF4BSRuxjd3TIRTSa%2B0w2E6BLYiy1Vs%2Bh9iwVXUWsGoxEzNHUd1uKj8GJpO9EqdEqGgfgsrahQY7Fq2T%2FZTtiEbjVBFJCYtfd7Ke%2Bo46UjkCrrezAoHEEgjcTI%2FXNLC677WV78zUM8HpM6m%2FAuoj74m48lUmFOfTHVzZyWZpnWNOIbQmOT%2F%2BWeC%2FlMZJqw1AOrm2dMX7C6v2GWUzOfKGX8l2a0A4PYJnak4FWG%2Fje7%2FUwtNZwnMbNbXMfdt3fq0d9n7Ln2JCIo1HAPpYveUvNlaL%2FwEn98%2F8dK%2BNOeTt3iV59QYtILz%2BR959pdJQ1lFraMeI%2B2wPxHzwV86tjCXk1QJweRENO7IB0w5O3SvAY6swKr7%2FPBkvqfIwBbe3s8QuXISoJhUDW7%2BOTqJrxBqH5oQBCprEsiB9Mw6GzX2vAX6cQsA%2B8eJWBCwfwhUL5qeBZ7bCvxbJxtNi6mgLT0wQo7HOn%2FET17lVv%2F9HGrLS6bPmO1qJ0LNoWn9fNvlG2F4UD7azdCo4Eeqy0RZNtSeTUlvScYuqtOJjqO9iqtRalbyiPJx00%2FT2g%2FGaLCIXcmBKqqcrtzBnD9VI1cXqXFHuzS79joJNQinKbWOEeK4lTt5QRAoFQxkdsEinTz4IXqVSeFOZEYb102pycfro1pkbJTCkV1GPmtrMXgRQ2B69NENILedQbcgEt%2Fwb%2Fb2lmr37hFm6IsE9yRgoo5IQOBtVQylkLy7Fty%2B4kitH37EW8YtptfRpU76gDIEGxTc5VIItps8L3f&X-Amz-Signature=9f5ca04aced4c59aed2d0cde4e7af2414972cd8e6f269eca0f086b0b369434a3&X-Amz-SignedHeaders=host&response-content-disposition=inline',
+        url: 'https://whatif-genai.s3.us-east-1.amazonaws.com/examples/Image+07-02-25+at+5.27%E2%80%AFPM.jpeg',
         width: 1200,
         height: 630,
         alt: 'WhatIf - Unleash Your Imagination',
@@ -40,7 +52,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'WhatIf - Unleash Your Imagination',
     description: 'Create and train custom AI models for image generation. Transform your ideas into reality with WhatIf AI.',
-    images: ['https://whatif-genai.s3.us-east-1.amazonaws.com/prompt_images/07fd35e53b600eb4d1ba27186298c24acc2a26e206aee508dd13de55b9ebaeb6.png'],
+    images: ['https://whatif-genai.s3.us-east-1.amazonaws.com/examples/Image+07-02-25+at+5.27%E2%80%AFPM.jpeg'],
     creator: '@whatif_ai',
   },
   robots: {
@@ -67,15 +79,30 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        <link
+          rel="icon"
+          type="image/jpeg"
+          sizes="32x32"
+          href="https://whatif-genai.s3.us-east-1.amazonaws.com/examples/Image+07-02-25+at+5.27%E2%80%AFPM.jpeg"
+        />
+        <link
+          rel="apple-touch-icon"
+          sizes="180x180"
+          href="https://whatif-genai.s3.us-east-1.amazonaws.com/examples/Image+07-02-25+at+5.27%E2%80%AFPM.jpeg"
+        />
+      </head>
       <body 
         className={`${inter.className} antialiased`}
         suppressHydrationWarning
       >
         <AuthProvider>
-          <ClientLayout>
-            {children}
-            <SafeSpeedInsights />
-          </ClientLayout>
+          <ModalProvider>
+            <ClientLayout>
+              {children}
+              <SafeSpeedInsights />
+            </ClientLayout>
+          </ModalProvider>
         </AuthProvider>
       </body>
     </html>
