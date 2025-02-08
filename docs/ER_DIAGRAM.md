@@ -1,12 +1,14 @@
 ```mermaid
 
 erDiagram
-    Users ||--o{ Photos : "has"
-    Users ||--o{ UserImages : "generates"
-    Users ||--o{ TrainingRuns : "trains"
-    Users ||--o{ InferenceRuns : "creates"
-    Feed ||--o{ Users : "viewed_by"
-    
+    Users ||--o{ Photos : has
+    Users ||--o{ UserImages : generates
+    Users ||--o{ TrainingRuns : trains
+    Users ||--o{ InferenceRuns : creates
+    Users ||--o{ Payments : makes
+    Users ||--o{ CreditTransactions : has
+    Feed ||--o{ Users : viewed_by
+    Payments ||--o{ CreditTransactions : triggers
 
     Users {
         ObjectId _id PK
@@ -32,6 +34,28 @@ erDiagram
         string latest_model_weights NULL
         string last_error NULL
         array models
+    }
+
+    Payments {
+        ObjectId _id PK
+        string user_id FK
+        float amount
+        string currency
+        string payment_method
+        string status
+        int credits_purchased
+        datetime created_at
+        string transaction_id
+    }
+
+    CreditTransactions {
+        ObjectId _id PK
+        string user_id FK
+        string run_id FK NULL
+        int amount
+        enum transaction_type
+        string description
+        datetime created_at
     }
 
     Photos {
@@ -124,6 +148,32 @@ The main collection storing user information and subscription details.
 - `latest_model_weights`: String (Optional)
 - `last_error`: String (Optional)
 - `models`: Array of model objects
+
+### Payments Collection
+Records all payment transactions.
+
+#### Fields:
+- `_id`: ObjectId (Primary Key)
+- `user_id`: String (Foreign Key → Users._id)
+- `amount`: Float
+- `currency`: String
+- `payment_method`: String
+- `status`: String ["pending", "completed", "failed", "refunded"]
+- `credits_purchased`: Integer
+- `created_at`: DateTime
+- `transaction_id`: String
+
+### CreditTransactions Collection
+Tracks credit usage and purchases.
+
+#### Fields:
+- `_id`: ObjectId (Primary Key)
+- `user_id`: String (Foreign Key → Users._id)
+- `run_id`: String (Foreign Key → InferenceRuns._id, Optional)
+- `amount`: Integer
+- `transaction_type`: Enum ["purchase", "usage", "refund", "bonus", "expiry"]
+- `description`: String
+- `created_at`: DateTime
 
 ### Photos Collection
 Stores metadata for user-uploaded photos.

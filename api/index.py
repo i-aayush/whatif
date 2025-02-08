@@ -11,7 +11,7 @@ import asyncio
 import traceback
 from datetime import datetime
 from contextlib import asynccontextmanager
-from backend.app.routes import auth, users, photos, generated_images, subscriptions, training, canvas_inference
+from backend.app.routes import auth, users, photos, generated_images, subscriptions, training, canvas_inference, credits
 from backend.app.config.config import settings
 from starlette.middleware.sessions import SessionMiddleware
 import secrets
@@ -134,6 +134,7 @@ app.include_router(generated_images.router, prefix="/generated-images", tags=["g
 app.include_router(subscriptions.router, prefix="/subscriptions", tags=["subscriptions"])
 app.include_router(training.router, prefix="/training", tags=["training"])
 app.include_router(canvas_inference.router, prefix="/canvasinference", tags=["canvasinference"])
+app.include_router(credits.router, prefix="/credits", tags=["credits"])
 
 @app.get("/")
 async def root():

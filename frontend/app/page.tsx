@@ -315,7 +315,7 @@ export default function Home() {
       <ExamplesShowcase />
 
       {/* Pricing Section */}
-      <Pricing />
+      <Pricing showCredits={false} />
       {/* Testimonial Section */}
       <div className="py-24 bg-black">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

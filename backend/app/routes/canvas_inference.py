@@ -11,6 +11,8 @@ from io import BytesIO
 from ..utils.auth import get_current_user
 from ..dependencies import get_db
 from ..config import settings
+from ..utils.credits import check_sufficient_credits, deduct_credits
+from ..utils.credit_constants import calculate_inference_cost
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -27,6 +29,35 @@ s3_client = boto3.client(
 BUCKET_NAME = 'whatif-genai'
 
 router = APIRouter()
+
+# Credit costs for different operations
+CREDIT_COSTS = {
+    "base_inference": 10,  # Base cost per inference
+    "additional_output": 5,  # Cost per additional output
+    "high_quality": 5,  # Additional cost for high quality
+    "extra_steps": 2,  # Cost per 10 additional steps over base
+}
+
+def calculate_inference_cost(params: dict) -> int:
+    """Calculate the total credit cost for an inference request"""
+    total_cost = CREDIT_COSTS["base_inference"]
+    
+    # Additional outputs cost
+    if params.get("num_outputs", 1) > 1:
+        additional_outputs = params["num_outputs"] - 1
+        total_cost += additional_outputs * CREDIT_COSTS["additional_output"]
+    
+    # High quality cost
+    if params.get("output_quality", 80) > 90:
+        total_cost += CREDIT_COSTS["high_quality"]
+    
+    # Extra steps cost
+    base_steps = 41  # Base number of steps
+    if params.get("num_inference_steps", base_steps) > base_steps:
+        extra_steps = params["num_inference_steps"] - base_steps
+        total_cost += (extra_steps // 10) * CREDIT_COSTS["extra_steps"]
+    
+    return total_cost
 
 def download_image(url: str) -> BytesIO:
     """Download image from URL to memory buffer"""
@@ -121,9 +152,20 @@ async def create_inference(
     try:
         # Get request data
         data = await request.json()
-        user_id = current_user.get('_id')
+        user_id = str(current_user.get('_id'))
         prompt = data.get('prompt', '')
         logger.info(f"Creating inference for user {user_id} with prompt: {prompt}")
+        
+        # Calculate credit cost using the utility function
+        credit_cost = calculate_inference_cost(data)
+        logger.info(f"Calculated credit cost: {credit_cost}")
+        
+        # Check if user has sufficient credits
+        if not await check_sufficient_credits(db, user_id, credit_cost):
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail=f"Insufficient credits. Required: {credit_cost}"
+            )
         
         # Get model_id from request
         model_id = data.get('model_id')
@@ -160,7 +202,8 @@ async def create_inference(
             "prompt": prompt,
             "processing_stats": {
                 "start_time": datetime.utcnow().isoformat()
-            }
+            },
+            "credit_cost": credit_cost
         }
         
         # Insert record and get ID
@@ -168,43 +211,65 @@ async def create_inference(
         inference_id = str(result.inserted_id)
         logger.info(f"Created inference record with ID: {inference_id}")
 
-        # Run inference asynchronously using the selected model
-        logger.info(f"Starting async inference with model: {model_id}")
-        prediction = await replicate_client.async_run(
-            model_id,
-            input=inference_params
-        )
-        
-        # Process results
-        output_urls = serialize_prediction(prediction)
-        logger.info(f"Received prediction output: {output_urls}")
+        try:
+            # Deduct credits before running inference
+            await deduct_credits(
+                db=db,
+                user_id=user_id,
+                amount=credit_cost,
+                description=f"Image generation - {prompt[:50]}{'...' if len(prompt) > 50 else ''}",
+                run_id=inference_id
+            )
+            
+            # Run inference asynchronously using the selected model
+            logger.info(f"Starting async inference with model: {model_id}")
+            prediction = await replicate_client.async_run(
+                model_id,
+                input=inference_params
+            )
+            
+            # Process results
+            output_urls = serialize_prediction(prediction)
+            logger.info(f"Received prediction output: {output_urls}")
 
-        # Upload to S3
-        s3_urls = await store_images_to_s3(output_urls, str(user_id), inference_id)
+            # Upload to S3
+            s3_urls = await store_images_to_s3(output_urls, user_id, inference_id)
 
-        # Calculate processing time
-        end_time = datetime.utcnow()
-        start_time = datetime.fromisoformat(inference_record["processing_stats"]["start_time"])
-        total_time = (end_time - start_time).total_seconds()
+            # Calculate processing time
+            end_time = datetime.utcnow()
+            start_time = datetime.fromisoformat(inference_record["processing_stats"]["start_time"])
+            total_time = (end_time - start_time).total_seconds()
 
-        # Update record with results
-        await db["inference_runs"].update_one(
-            {"_id": ObjectId(inference_id)},
-            {"$set": {
-                "status": "completed",
-                "replicate_urls": output_urls,
+            # Update record with results
+            await db["inference_runs"].update_one(
+                {"_id": ObjectId(inference_id)},
+                {"$set": {
+                    "status": "completed",
+                    "replicate_urls": output_urls,
+                    "output_urls": s3_urls,
+                    "completed_at": end_time,
+                    "processing_stats.end_time": end_time.isoformat(),
+                    "processing_stats.total_time_seconds": total_time
+                }}
+            )
+
+            return {
+                "status": "success",
+                "inference_id": inference_id,
                 "output_urls": s3_urls,
-                "completed_at": end_time,
-                "processing_stats.end_time": end_time.isoformat(),
-                "processing_stats.total_time_seconds": total_time
-            }}
-        )
+                "credit_cost": credit_cost
+            }
 
-        return {
-            "status": "success",
-            "inference_id": inference_id,
-            "output_urls": s3_urls
-        }
+        except Exception as e:
+            # If inference fails, refund the credits
+            await deduct_credits(
+                db=db,
+                user_id=user_id,
+                amount=credit_cost,
+                transaction_type="refund",
+                description=f"Refund for failed inference - {str(e)[:100]}"
+            )
+            raise
 
     except Exception as e:
         logger.error(f"Error in create_inference: {str(e)}", exc_info=True)

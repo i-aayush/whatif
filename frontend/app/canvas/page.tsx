@@ -649,6 +649,22 @@ export default function CanvasPage() {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         console.error('Inference error:', errorData);
+        
+        // Remove the temporary result if there was an error
+        setInferenceResults(prev => 
+          prev.filter(inf => !inf.inference_id.startsWith(tempInferenceId))
+        );
+
+        // Handle insufficient credits error
+        if (response.status === 402) {
+          toast.error('Insufficient credits. Please purchase more credits to continue.', {
+            duration: 4000,
+            position: 'bottom-center',
+          });
+          router.push('/pricing#credits');
+          return;
+        }
+
         throw new Error(errorData.message || errorData.detail || 'Failed to generate image');
       }
 
