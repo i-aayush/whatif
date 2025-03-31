@@ -1,5 +1,5 @@
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Request, BackgroundTasks, Query
-from typing import List
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Request, BackgroundTasks, Query, status
+from typing import List, Dict, Any
 import boto3
 import os
 import replicate
@@ -21,6 +21,8 @@ import json
 from ..config.config import settings
 from bson.objectid import ObjectId
 from ..utils.prompt_inferences import run_model_inferences
+from ..utils.credits import check_sufficient_credits, deduct_credits, add_credits
+from ..utils.credit_constants import calculate_training_cost
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -33,7 +35,8 @@ router = APIRouter()
 async def get_training_db():
     """Get a fresh database client for training operations"""
     client = get_background_db_client()
-    return client[settings.DB_NAME]
+    db = client[settings.DB_NAME]
+    return db
 
 # Initialize S3 client with retry configuration
 s3_config = Config(
@@ -215,21 +218,38 @@ async def save_upload_file_tmp(upload_file: UploadFile) -> str:
         logger.error(f"Error saving temporary file: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Could not save file: {str(e)}")
 
+@router.post("/upload-and-train")
 async def upload_and_train(
     files: List[UploadFile],
     model_name: str,
-    current_user: dict,
-    background_tasks: BackgroundTasks,
-    db: AsyncIOMotorClient = Depends(get_db)
+    high_quality: bool = False,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncIOMotorClient = Depends(get_db),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    request: Request = None
 ):
     """Handle file upload and start training process"""
     logger.info(f"Starting upload and train process for user {current_user['_id']} with model name {model_name}")
     temp_files = []
     training_id = None
-    db_error = None
-    background_db = None
-
+    
     try:
+        user_id = str(current_user.get('_id'))
+        
+        # Calculate credit cost
+        credit_cost = calculate_training_cost(
+            num_images=len(files),
+            high_quality=high_quality
+        )
+        logger.info(f"Calculated credit cost: {credit_cost}")
+        
+        # Check if user has sufficient credits
+        if not await check_sufficient_credits(db, user_id, credit_cost):
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail=f"Insufficient credits. Required: {credit_cost}"
+            )
+        
         # Create zip file in memory
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
@@ -254,16 +274,9 @@ async def upload_and_train(
         zip_buffer.seek(0)
         logger.info(f"Compressed zip size: {zip_size / (1024*1024):.2f} MB")
         
-        # Log zip contents for verification
-        verify_buffer = io.BytesIO(zip_buffer.getvalue())
-        with zipfile.ZipFile(verify_buffer) as verify_zip:
-            logger.info("Zip contents:")
-            for info in verify_zip.filelist:
-                logger.info(f"- {info.filename} (size: {info.file_size} bytes)")
-
         # Generate unique filename for S3
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        s3_key = f"training_data/{current_user['_id']}_{timestamp}.zip"
+        s3_key = f"training_data/{user_id}_{timestamp}.zip"
         logger.info(f"Generated zip filename: {s3_key}")
 
         # Upload to S3
@@ -286,53 +299,74 @@ async def upload_and_train(
         full_model_name = create_replicate_model(replicate_client, model_name)
         logger.info(f"Created/Retrieved model: {full_model_name}")
         
-        # Create training
-        training = replicate_client.trainings.create(
-            version="ostris/flux-dev-lora-trainer:e440909d3512c31646ee2e0c7d6f6f4923224863a6a10c494606e79fb5844497",
-            input={
-                "input_images": s3_url,
-                "steps": 2000,
-                "lora_rank": 16,
-                "optimizer": "adamw8bit",
-                "batch_size": 1,
-                "resolution": "512,768,1024",
-                "autocaption": True,
-                "trigger_word": model_name,
-                "learning_rate": 0.0004,
-                "wandb_project": "flux_train_replicate",
-                "wandb_save_interval": 100,
-                "caption_dropout_rate": 0.05,
-                "cache_latents_to_disk": False,
-                "wandb_sample_interval": 100,
-                "autocaption_prefix": f"photo of {model_name}"
-            },
-            destination=full_model_name
-        )
-        training_id = training.id
-        logger.info(f"Started training with ID: {training_id}")
-
-        # Create training run record in database
-        training_run = {
-            "training_id": training_id,
-            "user_id": current_user["_id"],
-            "trigger_word": model_name,
-            "status": "training",
-            "created_at": datetime.utcnow(),
-            "replicate_model_id": full_model_name,
-            "s3_url": s3_url
-        }
-
         try:
+            # Deduct credits before starting training
+            await deduct_credits(
+                db=db,
+                user_id=user_id,
+                amount=credit_cost,
+                description=f"Model training - {model_name}",
+                run_id=training_id
+            )
+            
+            # Generate a unique training ID
+            training_id = str(uuid.uuid4())
+            
+            # Construct webhook URL with training ID using frontend URL
+            webhook_url = f"{settings.FRONTEND_URL}/api/training/webhook/training?training_id={training_id}"
+            logger.info(f"Generated webhook URL: {webhook_url}")
+            
+            # Create training with webhook
+            training = replicate_client.trainings.create(
+                version="ostris/flux-dev-lora-trainer:e440909d3512c31646ee2e0c7d6f6f4923224863a6a10c494606e79fb5844497",
+                input={
+                    "input_images": s3_url,
+                    "steps": 2000,
+                    "lora_rank": 16,
+                    "optimizer": "adamw8bit",
+                    "batch_size": 1,
+                    "resolution": "512,768,1024",
+                    "autocaption": True,
+                    "trigger_word": model_name,
+                    "learning_rate": 0.0004,
+                    "wandb_project": "flux_train_replicate",
+                    "wandb_save_interval": 100,
+                    "caption_dropout_rate": 0.05,
+                    "cache_latents_to_disk": False,
+                    "wandb_sample_interval": 100,
+                    "autocaption_prefix": f"photo of {model_name}"
+                },
+                destination=full_model_name,
+                webhook=webhook_url
+            )
+            training_id = training.id
+            logger.info(f"Started training with ID: {training_id} and webhook URL: {webhook_url}")
+
             # Get background client for database operations
             background_db = get_background_db_client()
             db_instance = background_db[settings.DB_NAME]
+
+            # Create training run record in database
+            training_run = {
+                "training_id": training_id,
+                "user_id": user_id,
+                "model_name": model_name,
+                "status": "training",
+                "created_at": datetime.utcnow(),
+                "credit_cost": credit_cost,
+                "high_quality": high_quality,
+                "num_images": len(files),
+                "replicate_model_id": full_model_name,
+                "s3_url": s3_url,
+                "webhook_url": webhook_url
+            }
 
             # Insert training run record using background client
             await db_instance["training_runs"].insert_one(training_run)
 
             # Update user's model status using background client
             await db_instance["users"].update_one(
-                {"_id": current_user["_id"]},
+                {"_id": ObjectId(user_id)},
                 {
                     "$set": {
                         "model_status": "training",
@@ -341,7 +375,7 @@ async def upload_and_train(
                     "$push": {
                         "models": {
                             "model_id": str(training_id),
-                            "trigger_word": model_name,
+                            "model_name": model_name,
                             "status": "training",
                             "created_at": datetime.utcnow(),
                             "replicate_model_id": full_model_name
@@ -350,44 +384,45 @@ async def upload_and_train(
                 }
             )
 
-            # Start background polling task with the same background client
-            background_tasks.add_task(
-                poll_training_status,
-                training_id=training_id,
-                user_id=str(current_user["_id"]),
-                replicate_client=replicate_client,
-                db_client=db_instance
-            )
-
+            # Return training information
+            return {
+                "status": "training_started",
+                "training_id": str(training_id),
+                "model_name": model_name,
+                "credit_cost": credit_cost
+            }
+            
         except Exception as e:
-            logger.error(f"Database error: {str(e)}")
-            db_error = e
-
-        if db_error is not None:
-            raise db_error
-
-        return {
-            "status": "success",
-            "training_id": str(training_id),
-            "model_name": model_name
-        }
-
-    except Exception as e:
-        logger.error(f"Unhandled exception in upload-and-train: {str(e)}")
-        if training_id and background_db:
-            # Try to update the training status to error if we have a training ID
-            try:
-                db_instance = background_db[settings.DB_NAME]
+            # If training fails, refund the credits
+            if training_id:  # Only refund if we deducted credits
+                await add_credits(
+                    db=db,
+                    user_id=user_id,
+                    amount=credit_cost,
+                    transaction_type="refund",
+                    description=f"Refund for failed training - {str(e)[:100]}"
+                )
+            
+            # Update record with error if it exists
+            if training_id:
                 await db_instance["training_runs"].update_one(
                     {"training_id": training_id},
                     {"$set": {
-                        "status": "error",
-                        "error": str(e),
-                        "completed_at": datetime.utcnow()
+                        "status": "failed",
+                        "error": str(e)
                     }}
                 )
-            except Exception as db_error:
-                logger.error(f"Failed to update error status: {str(db_error)}")
+            
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Training failed: {str(e)}"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in upload-and-train: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         # Clean up temporary files
         for temp_path in temp_files:
@@ -403,6 +438,7 @@ async def check_training_status(
     current_user: dict = Depends(get_current_user),
     db: AsyncIOMotorClient = Depends(get_db)
 ):
+    """Check the status of a training run and update the database accordingly"""
     try:
         # Find the training run
         training_run = await db["training_runs"].find_one({"training_id": training_id})
@@ -421,48 +457,95 @@ async def check_training_status(
         status_response = replicate_client.trainings.get(training_id)
         current_status = status_response.status
 
+        # Get background client for database operations
+        background_db = get_background_db_client()
+        db_instance = background_db[settings.DB_NAME]
+
         # Update training run with current status
         update_data = {
-            "status": current_status
+            "status": current_status,
+            "last_checked": datetime.utcnow()
         }
         
         # If training is completed, update with output data
         if current_status == "succeeded":
+            model_version = status_response.version
             update_data.update({
-                "version": status_response.output.get("version"),
-                "weights": status_response.output.get("weights")
+                "version": model_version.id if model_version else None,
+                "weights": status_response.output.get("weights"),
+                "completed_at": datetime.utcnow()
             })
             
             # Update user's model status
-            await db["users"].update_one(
-                {"_id": training_run["user_id"]},
-                {"$set": {
-                    "model_status": "completed",
-                    "current_training_id": None
-                }}
-            )
-        elif current_status in ["failed", "canceled"]:
-            # Update user's model status for failed cases
-            await db["users"].update_one(
-                {"_id": training_run["user_id"]},
-                {"$set": {
-                    "model_status": "error",
-                    "current_training_id": None
-                }}
+            await db_instance["users"].update_one(
+                {"_id": ObjectId(training_run["user_id"])},
+                {
+                    "$set": {
+                        "model_status": "completed",
+                        "current_training_id": None,
+                        "latest_model_version": model_version.id if model_version else None
+                    }
+                }
             )
 
-        await db["training_runs"].update_one(
+            # Run automated inferences if training succeeded
+            try:
+                logger.info(f"Starting automated inferences for model {model_version.id}")
+                inference_ids = await run_model_inferences(
+                    model_id=model_version.id,
+                    user_id=str(training_run["user_id"]),
+                    db=db_instance
+                )
+                logger.info(f"Completed automated inferences, count: {len(inference_ids)}")
+                
+                update_data.update({
+                    "automated_inference_ids": inference_ids,
+                    "automated_inference_count": len(inference_ids)
+                })
+            except Exception as e:
+                logger.error(f"Error running automated inferences: {str(e)}")
+                # Don't raise the exception - we don't want to mark the training as failed
+
+        elif current_status in ["failed", "canceled"]:
+            update_data.update({
+                "status": current_status,
+                "completed_at": datetime.utcnow(),
+                "error": status_response.error if current_status == "failed" else "Training was canceled"
+            })
+            
+            # Update user's model status
+            await db_instance["users"].update_one(
+                {"_id": ObjectId(training_run["user_id"])},
+                {
+                    "$set": {
+                        "model_status": "failed" if current_status == "failed" else "canceled",
+                        "current_training_id": None,
+                        "last_error": status_response.error if current_status == "failed" else "Training was canceled"
+                    }
+                }
+            )
+
+        # Update training run with all accumulated changes
+        await db_instance["training_runs"].update_one(
             {"training_id": training_id},
             {"$set": update_data}
         )
 
+        # Return comprehensive status information
         return {
             "status": current_status,
-            "version": status_response.output.get("version") if current_status == "succeeded" else None,
-            "weights": status_response.output.get("weights") if current_status == "succeeded" else None
+            "training_id": training_id,
+            "model_name": training_run["model_name"],
+            "version": update_data.get("version"),
+            "weights": update_data.get("weights"),
+            "error": update_data.get("error"),
+            "completed_at": update_data.get("completed_at"),
+            "should_continue_polling": current_status not in ["succeeded", "failed", "canceled"],
+            "polling_interval": 60  # Frontend should continue polling every 60 seconds
         }
 
     except Exception as e:
+        logger.error(f"Error checking training status: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/training-runs")
@@ -568,9 +651,9 @@ async def init_upload(
     """Initialize a new upload session"""
     try:
         upload_id = str(uuid.uuid4())
-        # Use a dedicated directory for upload sessions instead of system temp
-        base_upload_dir = Path("upload_sessions")
-        base_upload_dir.mkdir(exist_ok=True)
+        # Use system's temp directory instead of a fixed directory
+        base_upload_dir = Path(tempfile.gettempdir()) / "whatif_uploads"
+        base_upload_dir.mkdir(exist_ok=True, parents=True)
         
         upload_dir = base_upload_dir / upload_id
         upload_dir.mkdir(exist_ok=True)
@@ -609,8 +692,8 @@ async def upload_chunk(
 ):
     """Handle individual chunk uploads"""
     try:
-        # Use the dedicated upload directory
-        base_upload_dir = Path("upload_sessions")
+        # Use system's temp directory
+        base_upload_dir = Path(tempfile.gettempdir()) / "whatif_uploads"
         upload_dir = base_upload_dir / upload_id
         session_file = upload_dir / "session.json"
         
@@ -652,9 +735,11 @@ async def upload_chunk(
         # Save chunk with proper error handling
         chunk_path = file_dir / f"chunk_{chunk_index}"
         try:
-            content = await file.read()
+            # Read chunk in binary mode
+            chunk_data = await file.read()
+            # Write chunk in binary mode
             with open(chunk_path, "wb") as f:
-                f.write(content)
+                f.write(chunk_data)
         except Exception as e:
             logger.error(f"Error saving chunk {chunk_index} for file {filename}: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Failed to save chunk: {str(e)}")
@@ -743,7 +828,7 @@ async def check_training_status(
 
 async def process_completed_upload(upload_id: str, model_name: str, current_user: dict, db: AsyncIOMotorClient, background_tasks: BackgroundTasks):
     """Process a completed upload by assembling chunks and starting training"""
-    base_upload_dir = Path("upload_sessions")
+    base_upload_dir = Path(tempfile.gettempdir()) / "whatif_uploads"
     upload_dir = base_upload_dir / upload_id
     temp_files = []
     upload_files = []
@@ -837,3 +922,107 @@ async def process_completed_upload(upload_id: str, model_name: str, current_user
                 logger.info(f"Cleaned up upload directory: {upload_dir}")
         except Exception as e:
             logger.error(f"Error cleaning up upload directory {upload_dir}: {str(e)}")
+
+@router.post("/webhook/training")
+async def training_webhook(
+    request: Request,
+    db: AsyncIOMotorClient = Depends(get_db)
+):
+    """Handle webhook callbacks from Replicate for training status updates"""
+    try:
+        # Get the raw payload
+        payload = await request.json()
+        logger.info(f"Received webhook payload: {payload}")
+        
+        # Extract relevant information
+        training_id = payload.get("id")
+        status = payload.get("status")
+        
+        if not training_id or not status:
+            raise HTTPException(status_code=400, detail="Invalid webhook payload")
+            
+        # Get background client for database operations
+        background_db = get_background_db_client()
+        db_instance = background_db[settings.DB_NAME]
+        
+        # Find the training run
+        training_run = await db_instance["training_runs"].find_one({"training_id": training_id})
+        if not training_run:
+            raise HTTPException(status_code=404, detail="Training run not found")
+            
+        # Update training run with current status
+        update_data = {
+            "status": status,
+            "last_checked": datetime.utcnow()
+        }
+        
+        # If training is completed, update with output data
+        if status == "succeeded":
+            model_version = payload.get("output", {}).get("version")
+            weights = payload.get("output", {}).get("weights")
+            update_data.update({
+                "version": model_version,
+                "weights": weights,
+                "completed_at": datetime.utcnow()
+            })
+            
+            # Update user's model status
+            await db_instance["users"].update_one(
+                {"_id": ObjectId(training_run["user_id"])},
+                {
+                    "$set": {
+                        "model_status": "completed",
+                        "current_training_id": None,
+                        "latest_model_version": model_version
+                    }
+                }
+            )
+            
+            # Run automated inferences if training succeeded
+            try:
+                logger.info(f"Starting automated inferences for model {model_version}")
+                inference_ids = await run_model_inferences(
+                    model_id=model_version,
+                    user_id=str(training_run["user_id"]),
+                    db=db_instance
+                )
+                logger.info(f"Completed automated inferences, count: {len(inference_ids)}")
+                
+                update_data.update({
+                    "automated_inference_ids": inference_ids,
+                    "automated_inference_count": len(inference_ids)
+                })
+            except Exception as e:
+                logger.error(f"Error running automated inferences: {str(e)}")
+                
+        elif status in ["failed", "canceled"]:
+            error = payload.get("error", "Unknown error")
+            update_data.update({
+                "status": status,
+                "completed_at": datetime.utcnow(),
+                "error": error
+            })
+            
+            # Update user's model status
+            await db_instance["users"].update_one(
+                {"_id": ObjectId(training_run["user_id"])},
+                {
+                    "$set": {
+                        "model_status": status,
+                        "current_training_id": None,
+                        "last_error": error
+                    }
+                }
+            )
+        
+        # Update training run with all accumulated changes
+        await db_instance["training_runs"].update_one(
+            {"training_id": training_id},
+            {"$set": update_data}
+        )
+        
+        return {"status": "success", "message": "Webhook processed successfully"}
+        
+    except Exception as e:
+        logger.error(f"Error processing webhook: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))

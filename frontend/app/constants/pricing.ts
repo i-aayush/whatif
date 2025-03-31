@@ -26,6 +26,37 @@ export interface PricingPlans {
   yearly: PricingPlan[];
 }
 
+// Credit package types and constants
+export interface CreditPackage {
+  name: string;
+  credits: number;
+  priceUSD: number;
+  discount: number;
+}
+
+export const CREDIT_PACKAGES = {
+  starter: {
+    name: 'Starter Pack',
+    credits: 50,
+    priceUSD: 5,
+    discount: 0
+  },
+  pro: {
+    name: 'Pro Pack',
+    credits: 100,
+    priceUSD: 9,
+    discount: 10
+  },
+  premium: {
+    name: 'Premium Pack',
+    credits: 500,
+    priceUSD: 45,
+    discount: 20
+  }
+} as const;
+
+export type CreditPackageType = keyof typeof CREDIT_PACKAGES;
+
 // Constants
 export const YEARLY_DISCOUNT = 20; // 20% discount for yearly plans
 export const MONTHS_IN_YEAR = 12;

@@ -239,14 +239,31 @@ class Handler(BaseHTTPRequestHandler):
         try:
             # Read request details
             content_length = int(self.headers.get("content-length", 0))
-            body = self.rfile.read(content_length).decode() if content_length > 0 else ""
+            content_type = self.headers.get("content-type", "")
+            
+            # Handle multipart form data differently
+            if content_type.startswith("multipart/form-data"):
+                # For multipart/form-data, don't try to decode the body
+                body = self.rfile.read(content_length) if content_length > 0 else b""
+                is_binary = True
+                # Convert binary data to base64
+                import base64
+                body = base64.b64encode(body).decode('utf-8')
+            else:
+                # For regular requests, decode as UTF-8
+                body = self.rfile.read(content_length).decode() if content_length > 0 else ""
+                is_binary = False
+            
             path_parts = self.path.split('?', 1)
             path = path_parts[0]
             query_string = path_parts[1] if len(path_parts) > 1 else ""
             
             # Log request details
             logger.info(f"[{request_id}] Path: {path}")
-            logger.info(f"[{request_id}] Body: {body}")
+            if not is_binary:
+                logger.info(f"[{request_id}] Body: {body}")
+            else:
+                logger.info(f"[{request_id}] Body: <binary data>")
 
             # Construct event for Mangum
             raw_path = path[4:] if path.startswith('/api') else path
@@ -266,7 +283,7 @@ class Handler(BaseHTTPRequestHandler):
                     }
                 },
                 "body": body,
-                "isBase64Encoded": False
+                "isBase64Encoded": is_binary
             }
 
             # Call the Mangum handler

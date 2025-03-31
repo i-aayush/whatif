@@ -11,7 +11,7 @@ from io import BytesIO
 from ..utils.auth import get_current_user
 from ..dependencies import get_db
 from ..config import settings
-from ..utils.credits import check_sufficient_credits, deduct_credits
+from ..utils.credits import check_sufficient_credits, deduct_credits, add_credits
 from ..utils.credit_constants import calculate_inference_cost
 
 # Set up logging
@@ -154,9 +154,17 @@ async def create_inference(
         data = await request.json()
         user_id = str(current_user.get('_id'))
         prompt = data.get('prompt', '')
-        logger.info(f"Creating inference for user {user_id} with prompt: {prompt}")
         
-        # Calculate credit cost using the utility function
+        # Detailed logging of frontend request
+        logger.info("\n=== Frontend Request Data ===")
+        logger.info(f"User ID: {user_id}")
+        logger.info(f"Prompt: {prompt}")
+        logger.info(f"Raw Request Data:")
+        for key, value in data.items():
+            logger.info(f"  {key}: {value}")
+        logger.info("===========================\n")
+        
+        # Calculate credit cost
         credit_cost = calculate_inference_cost(data)
         logger.info(f"Calculated credit cost: {credit_cost}")
         
@@ -168,9 +176,7 @@ async def create_inference(
             )
         
         # Get model_id from request
-        model_id = data.get('model_id')
-        if not model_id:
-            model_id = "black-forest-labs/flux-1.1-pro"  # fallback default
+        model_id = data.get('model_id', "black-forest-labs/flux-1.1-pro")
         logger.info(f"Selected model: {model_id}")
 
         # Initialize Replicate client
@@ -180,17 +186,30 @@ async def create_inference(
         # Prepare inference parameters
         inference_params = {
             "prompt": data.get('prompt'),
+            "model": "dev",
             "prompt_upsampling": True,
             "num_outputs": data.get('num_outputs', 1),
             "guidance_scale": data.get('guidance_scale', 3.0),
             "prompt_strength": data.get('prompt_strength', 0.96),
             "num_inference_steps": data.get('num_inference_steps', 41),
-            "output_quality": data.get('output_quality', 100)
+            "output_quality": data.get('output_quality', 100),
+            "output_format": "png",
+            "go_fast": False,
+            "lora_scale": 1,
+            "megapixels": "1",
+            "aspect_ratio": data.get('aspect_ratio', '1:1')
         }
 
         # Remove None values from parameters
-        inference_params = {k: v for k, v in inference_params.items() if v is not None}
-        logger.info(f"Inference parameters prepared: {inference_params}")
+        inference_params = {k: v for k, v in inference_params.items() if v is not None and k != 'aspect_ratio'}
+        # Ensure aspect_ratio is always included
+        inference_params['aspect_ratio'] = data.get('aspect_ratio', '1:1')
+
+        # Log parameters being sent to model
+        logger.info("\n=== Parameters Being Sent to Model ===")
+        for key, value in inference_params.items():
+            logger.info(f"  {key}: {value}")
+        logger.info("===================================\n")
 
         # Create initial inference record
         inference_record = {
@@ -200,10 +219,10 @@ async def create_inference(
             "status": "processing",
             "created_at": datetime.utcnow(),
             "prompt": prompt,
+            "credit_cost": credit_cost,
             "processing_stats": {
                 "start_time": datetime.utcnow().isoformat()
-            },
-            "credit_cost": credit_cost
+            }
         }
         
         # Insert record and get ID
@@ -262,18 +281,15 @@ async def create_inference(
 
         except Exception as e:
             # If inference fails, refund the credits
-            await deduct_credits(
+            await add_credits(
                 db=db,
                 user_id=user_id,
                 amount=credit_cost,
                 transaction_type="refund",
                 description=f"Refund for failed inference - {str(e)[:100]}"
             )
-            raise
-
-    except Exception as e:
-        logger.error(f"Error in create_inference: {str(e)}", exc_info=True)
-        if 'inference_id' in locals():
+            
+            # Update record with error
             await db["inference_runs"].update_one(
                 {"_id": ObjectId(inference_id)},
                 {"$set": {
@@ -282,6 +298,16 @@ async def create_inference(
                     "processing_stats.end_time": datetime.utcnow().isoformat()
                 }}
             )
+            
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Inference failed: {str(e)}"
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in create_inference: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/inferences")

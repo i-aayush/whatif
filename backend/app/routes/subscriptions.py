@@ -11,6 +11,8 @@ from datetime import datetime
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from ..dependencies import get_db
 import asyncio
+from ..utils.credits import add_credits
+from ..utils.credit_constants import CREDIT_PACKAGES
 
 router = APIRouter()
 
@@ -205,6 +207,21 @@ async def verify_subscription(
         if result.matched_count == 0:
             print(f"User not found in database: {user_id}")
             raise HTTPException(status_code=404, detail="User not found")
+
+        # Add subscription credits
+        if plan_name and billing_type:
+            credits_amount = CREDIT_PACKAGES[plan_name.lower()]["credits"]
+            if billing_type == "yearly":
+                credits_amount *= 12  # Multiply by 12 for yearly subscriptions
+            
+            await add_credits(
+                db=db,
+                user_id=str(user_id),
+                amount=credits_amount,
+                transaction_type="subscription",
+                description=f"Credits from {plan_name.capitalize()} {billing_type} subscription"
+            )
+            print(f"Added {credits_amount} credits to user {user_id}")
 
         # If status is still 'created' after retries, return 202 Accepted
         if status == 'created':

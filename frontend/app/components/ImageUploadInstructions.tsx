@@ -167,7 +167,7 @@ const ImageUploadInstructions: React.FC<ImageUploadInstructionsProps> = ({
                 key={index} 
                 className="flex-[0_0_100%] min-w-0 pl-4 md:flex-[0_0_50%] lg:flex-[0_0_33.333%]"
               >
-                <div className="p-4 border rounded-lg bg-white shadow-sm h-full">
+                <div className="p-4 border rounded-lg bg-white shadow-sm h-full hover:shadow-lg transition-shadow duration-300">
                   <img 
                     src={tile.image} 
                     alt={tile.title} 
@@ -227,7 +227,7 @@ const ImageUploadInstructions: React.FC<ImageUploadInstructionsProps> = ({
           isUploading={isUploading}
           accept="image/jpeg,image/png"
           multiple
-          className="w-full"
+          className="w-full border-2 border-dashed border-gray-300 p-4 rounded-lg hover:border-gray-400 transition-colors"
         />
       </div>
 

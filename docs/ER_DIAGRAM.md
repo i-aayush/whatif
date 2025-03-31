@@ -23,6 +23,7 @@ erDiagram
         string given_name NULL
         string family_name NULL
         datetime created_at
+        int credits_balance
         enum subscription_status
         string subscription_id NULL
         enum subscription_plan NULL
@@ -137,6 +138,7 @@ The main collection storing user information and subscription details.
 - `given_name`: String (Optional)
 - `family_name`: String (Optional)
 - `created_at`: DateTime
+- `credits_balance`: Integer
 - `subscription_status`: Enum ["inactive", "active", "cancelled"]
 - `subscription_id`: String (Optional)
 - `subscription_plan`: Enum ["starter", "pro", "premium"]

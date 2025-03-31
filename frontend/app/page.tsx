@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import ExamplesShowcase from './components/ExamplesShowcase';
-import Pricing from './pricing/page';
+import { PricingContent } from './components/PricingContent';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import 'swiper/css';
 import 'swiper/css/navigation';
@@ -315,7 +315,7 @@ export default function Home() {
       <ExamplesShowcase />
 
       {/* Pricing Section */}
-      <Pricing showCredits={false} />
+      <PricingContent showCredits={false} />
       {/* Testimonial Section */}
       <div className="py-24 bg-black">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

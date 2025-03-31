@@ -16,7 +16,7 @@ export default function CreditDisplay({ credits = 0 }: CreditDisplayProps) {
       onClick={openCreditHistory}
     >
       <FaCoins className="w-4 h-4 text-yellow-600" />
-      <span className="text-sm font-medium">{credits}</span>
+      <span className="text-sm font-medium">{credits || 0}</span>
     </div>
   );
 } 

@@ -76,6 +76,7 @@ Response:
   "age": "integer?",
   "gender": "string?",
   "picture_url": "string?",
+  "credits_balance": "integer",
   "subscription_status": "string",
   "subscription_plan": "string?",
   "subscription_type": "string?"

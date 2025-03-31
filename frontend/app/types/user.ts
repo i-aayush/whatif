@@ -9,5 +9,5 @@ export interface User {
   latest_model_weights?: string | null;
   created_at?: string;
   updated_at?: string;
-  credits?: number;
+  credits: number;
 } 

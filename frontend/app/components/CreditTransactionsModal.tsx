@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { IoMdClose } from 'react-icons/io';
 import { API_URL } from '../config/config';
 import { format } from 'date-fns';
+import { useRouter } from 'next/navigation';
 
 interface Transaction {
   _id: string;
@@ -22,6 +23,7 @@ export default function CreditTransactionsModal({ isOpen, onClose }: CreditTrans
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [activeTab, setActiveTab] = useState<'all' | 'consumed' | 'purchase' | 'obtained'>('all');
   const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
     if (isOpen) {
@@ -54,6 +56,11 @@ export default function CreditTransactionsModal({ isOpen, onClose }: CreditTrans
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handlePurchaseCredits = () => {
+    onClose();
+    router.push('/pricing#credits');
   };
 
   if (!isOpen) return null;
@@ -150,7 +157,7 @@ export default function CreditTransactionsModal({ isOpen, onClose }: CreditTrans
               The costs of generation can vary due to factors like quantity, style and length.
             </div>
             <button
-              onClick={onClose}
+              onClick={handlePurchaseCredits}
               className="px-6 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-full font-medium hover:shadow-lg transition-all"
             >
               Purchase Credits

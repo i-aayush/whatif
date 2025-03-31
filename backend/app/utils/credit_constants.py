@@ -2,64 +2,39 @@
 
 # Credit costs for different operations
 INFERENCE_COSTS = {
-    "base_inference": 1,  # Base cost per inference (1 credit per image)
-    "additional_output": 0,  # Cost per additional output
-    "high_quality": 0,  # Additional cost for high quality
-    "extra_steps": 0,  # Cost per 10 additional steps over base
+    "base_inference": 1,  # Base cost per inference
+    "additional_output": 1,  # Cost per additional output
+    "high_quality": 2,  # Additional cost for high quality
+    "extra_steps": 1,  # Cost per 10 additional steps over base
 }
 
 TRAINING_COSTS = {
-    "base_training": 100,  # Base cost for model training
-    "per_image": 0,  # Additional cost per training image
-    "high_quality": 0,  # Additional cost for high quality training
+    "base_training": 50,  # Base cost for model training
+    "per_image": 2,  # Additional cost per training image
+    "high_quality": 20,  # Additional cost for high quality training
 }
 
-# Credit packages with USD and INR pricing
+
+
+# Credit packages with USD pricing
 CREDIT_PACKAGES = {
     "starter": {
-        "name": "Starter",
+        "name": "Starter Pack",
         "credits": 50,
-        "models_per_month": 1,
-        "price_usd": 9,
-        "price_inr": 774,
-        "currency": "USD",
-        "description": "Perfect for getting started",
-        "features": [
-            "50 AI Photos (credits)",
-            "Create 1 AI Model per month",
-            "WhatIf AI photorealistic model",
-            "Low quality photos"
-        ]
+        "price_usd": 5,
+        "discount": 0
     },
     "pro": {
-        "name": "Pro",
-        "credits": 500,
-        "models_per_month": 2,
-        "price_usd": 49,
-        "price_inr": 4214,
-        "currency": "USD",
-        "description": "Most popular for regular users",
-        "features": [
-            "500 AI Photos (credits)",
-            "Create 2 AI Models per month",
-            "WhatIf AI photorealistic model",
-            "Medium quality photos"
-        ]
+        "name": "Pro Pack",
+        "credits": 100,
+        "price_usd": 9,
+        "discount": 10
     },
     "premium": {
-        "name": "Premium",
-        "credits": 3000,
-        "models_per_month": 10,
-        "price_usd": 199,
-        "price_inr": 17114,
-        "currency": "USD",
-        "description": "Best value for power users",
-        "features": [
-            "3,000 AI Photos (credits)",
-            "Create 10 AI Models per month",
-            "WhatIf AI photorealistic model",
-            "High quality photos"
-        ]
+        "name": "Premium Pack",
+        "credits": 500,
+        "price_usd": 45,
+        "discount": 20
     }
 }
 
@@ -85,16 +60,15 @@ def calculate_inference_cost(params: dict) -> int:
     
     return total_cost
 
-def calculate_training_cost(params: dict) -> int:
+def calculate_training_cost(num_images: int, high_quality: bool = False) -> int:
     """Calculate the total credit cost for a training request"""
     total_cost = TRAINING_COSTS["base_training"]
     
-    # Cost per training image
-    num_images = len(params.get("files", []))
+    # Add cost for each training image
     total_cost += num_images * TRAINING_COSTS["per_image"]
     
-    # High quality training cost
-    if params.get("high_quality", False):
+    # Add cost for high quality training if requested
+    if high_quality:
         total_cost += TRAINING_COSTS["high_quality"]
     
     return total_cost 

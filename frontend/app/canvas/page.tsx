@@ -33,6 +33,7 @@ import type {
   PromptSuggestion,
   ModelPreset
 } from '../types'
+import { ENDPOINTS } from '../constants/api';
 
 interface SelectedOption {
   type: 'model' | 'preset' | 'aspect';
@@ -403,7 +404,7 @@ export default function CanvasPage() {
       const token = localStorage.getItem('token');
       if (!token) throw new Error('No authentication token found');
 
-      const response = await fetch(`${API_URL}/canvasinference/inferences?page=${recentPage}&limit=20`, {
+      const response = await fetch(`${ENDPOINTS.CANVAS_INFERENCE.LIST}?page=${recentPage}&limit=20`, {
         headers: { 
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -637,7 +638,7 @@ export default function CanvasPage() {
         [tempInferenceId]: calculateEstimatedTime(params) 
       }));
 
-      const response = await fetch(`${API_URL}/canvasinference/inference`, {
+      const response = await fetch(ENDPOINTS.CANVAS_INFERENCE.CREATE, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -783,6 +784,13 @@ export default function CanvasPage() {
     // Update the actual inference params without debounce
     handleParamChange('prompt', value);
     setShowPromptGuide(false);
+
+    // Preserve cursor position after state update
+    requestAnimationFrame(() => {
+      if (textareaRef.current) {
+        textareaRef.current.setSelectionRange(position, position);
+      }
+    });
   }, []);
 
   // Memoize filtered suggestions computation
@@ -825,10 +833,16 @@ export default function CanvasPage() {
     handleParamChange('prompt', newValue);
     setShowSuggestions(false);
     
-    // Focus back on textarea and set cursor position
+    // Focus back on textarea and preserve cursor position
     textareaRef.current.focus();
-    const newPosition = newValue.length;
-    textareaRef.current.setSelectionRange(newPosition, newPosition);
+    const newPosition = beforeCursor.length + suggestion.text.length + 1; // +1 for the space
+    
+    requestAnimationFrame(() => {
+      if (textareaRef.current) {
+        textareaRef.current.setSelectionRange(newPosition, newPosition);
+        setCursorPosition(newPosition);
+      }
+    });
   }, [cursorPosition, handleParamChange]);
 
   // Model Creation Handlers
@@ -1331,8 +1345,8 @@ export default function CanvasPage() {
                               <FiUser className={selectedModel?.id === model.id ? 'text-purple-600' : 'text-gray-500'} />
                             )}
                             <div>
-                              <div className="font-medium text-sm">{model.name}</div>
-                              <div className="text-xs text-gray-500">v{model.version}</div>
+                              <div className="font-medium text-sm truncate max-w-[200px]">{model.name}</div>
+                              <div className="text-xs text-gray-500 truncate max-w-[200px]">v{model.version}</div>
                             </div>
                           </button>
                         ))}
@@ -1394,8 +1408,8 @@ export default function CanvasPage() {
                                 <FiCamera className={selectedPreset === preset.name ? 'text-blue-600' : 'text-gray-500'} />
                               )}
                               <div>
-                                <div className="font-medium text-sm">{preset.name}</div>
-                                <div className="text-xs text-gray-500">{preset.description}</div>
+                                <div className="font-medium text-sm truncate max-w-[200px]">{preset.name}</div>
+                                <div className="text-xs text-gray-500 truncate max-w-[200px]">{preset.description}</div>
                               </div>
                             </button>
                           ))}
@@ -1419,55 +1433,59 @@ export default function CanvasPage() {
         {/* Prompt Input Row */}
         <div className="px-4 pb-4">
           <div className="relative">
-            <div className="relative">
-              <textarea
-                ref={textareaRef}
-                value={inferenceParams.prompt}
-                onChange={handlePromptInput}
-                className="w-full px-4 py-3 pr-[100px] border border-gray-300 rounded-lg shadow-sm 
-                focus:ring-blue-500 focus:border-blue-500 transition-shadow hover:border-blue-200 
-                text-sm min-h-[80px] resize-none text-transparent caret-gray-900"
-                placeholder={selectedModel?.type === 'custom' ? 
-                  `Try: 'A professional photo of ${selectedModel.name} in a business suit...'` : 
-                  "Try: 'A hyperrealistic portrait of a person in a cyberpunk setting...'"
+            <textarea
+              ref={textareaRef}
+              value={inferenceParams.prompt}
+              onChange={handlePromptInput}
+              onFocus={() => setShowPromptGuide(false)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setShowSuggestions(false);
+                } else if (e.key === 'Tab' && showSuggestions && filteredSuggestions.length > 0) {
+                  e.preventDefault();
+                  applySuggestion(filteredSuggestions[0]);
+                } else if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  const text = e.currentTarget.value;
+                  setRecentPrompts(prev => [{
+                    text: text.replace('\n', ''),
+                    timestamp: new Date().toISOString()
+                  }, ...prev.slice(0, 9)]);
                 }
-              />
+              }}
+              className="w-full px-4 py-3 pr-[100px] border border-gray-300 rounded-lg shadow-sm 
+              focus:ring-blue-500 focus:border-blue-500 transition-shadow hover:border-blue-200 
+              text-sm min-h-[80px] outline-none text-gray-900 resize-none"
+              placeholder={selectedModel?.type === 'custom' ? 
+                `Try: 'A professional photo of ${selectedModel.name} in a business suit...'` : 
+                "Try: 'A hyperrealistic portrait of a person in a cyberpunk setting...'"
+              }
+            />
+            
+            {/* Generate Button */}
+            <button
+              onClick={startInference}
+              disabled={isSubmitting || !inferenceParams.prompt}
+              className="absolute right-2 bottom-2 h-9 w-9 bg-blue-600 text-white rounded-full 
+              hover:bg-blue-700 transition-all disabled:bg-blue-300 disabled:cursor-not-allowed 
+              text-sm font-medium flex items-center justify-center"
+            >
+              {isSubmitting ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+              ) : (
+                <>
+                  <FiArrowUp className="w-4 h-4" />
+                  {inferenceParams.num_outputs > 1 && (
+                    <div className="absolute -top-2 -right-2 bg-white text-blue-600 text-xs 
+                    rounded-full h-5 w-5 flex items-center justify-center shadow-sm">
+                      {inferenceParams.num_outputs}x
+                    </div>
+                  )}
+                </>
+              )}
+            </button>
 
-              {/* Display highlighted text overlay */}
-              <div 
-                className="absolute inset-0 pointer-events-none px-4 py-3 pr-[100px] text-sm whitespace-pre-wrap text-gray-900"
-                dangerouslySetInnerHTML={{ 
-                  __html: selectedModel?.type === 'custom' ? 
-                    highlightModelName(inferenceParams.prompt || textareaRef.current?.placeholder || '', selectedModel.name) : 
-                    inferenceParams.prompt || textareaRef.current?.placeholder || ''
-                }}
-              />
-              
-              {/* Generate Button */}
-              <button
-                onClick={startInference}
-                disabled={isSubmitting || !inferenceParams.prompt}
-                className="absolute right-2 bottom-2 h-9 w-9 bg-blue-600 text-white rounded-full 
-                hover:bg-blue-700 transition-all disabled:bg-blue-300 disabled:cursor-not-allowed 
-                text-sm font-medium flex items-center justify-center"
-              >
-                {isSubmitting ? (
-                  <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
-                ) : (
-                  <>
-                    <FiArrowUp className="w-4 h-4" />
-                    {inferenceParams.num_outputs > 1 && (
-                      <div className="absolute -top-2 -right-2 bg-white text-blue-600 text-xs 
-                      rounded-full h-5 w-5 flex items-center justify-center shadow-sm">
-                        {inferenceParams.num_outputs}x
-                      </div>
-                    )}
-                  </>
-                )}
-              </button>
-            </div>
-
-            {/* Model Name Suggestion - Now below textbox */}
+            {/* Model Name Suggestion */}
             {selectedModel?.type === 'custom' && !inferenceParams.prompt.toLowerCase().includes(selectedModel.name.toLowerCase()) && (
               <div className="mt-2 text-xs text-gray-500 flex items-center gap-1.5">
                 <FiInfo className="w-3.5 h-3.5" />
@@ -1679,8 +1697,8 @@ export default function CanvasPage() {
                                 )}
                               </div>
                               <div>
-                                <div className="font-medium text-sm">{model.name}</div>
-                                <div className="text-xs text-gray-500">v{model.version}</div>
+                                <div className="font-medium text-sm truncate max-w-[200px]">{model.name}</div>
+                                <div className="text-xs text-gray-500 truncate max-w-[200px]">v{model.version}</div>
                               </div>
                             </div>
                             {model.type === 'custom' && model.created_at && (
@@ -1988,11 +2006,20 @@ export default function CanvasPage() {
                           } else if (e.key === 'Tab' && showSuggestions && filteredSuggestions.length > 0) {
                             e.preventDefault();
                             applySuggestion(filteredSuggestions[0]);
+                          } else if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            const text = e.currentTarget.value;
+                            setRecentPrompts(prev => [{
+                              text: text.replace('\n', ''),
+                              timestamp: new Date().toISOString()
+                            }, ...prev.slice(0, 9)]);
                           }
                         }}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition-shadow hover:border-blue-200 text-xs"
-                        rows={4}
-                        placeholder="Describe what you want to create..."
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition-shadow hover:border-blue-200 text-sm min-h-[80px] outline-none text-gray-900"
+                        placeholder={selectedModel?.type === 'custom' ? 
+                          `Try: 'A professional photo of ${selectedModel.name} in a business suit...'` : 
+                          "Try: 'A hyperrealistic portrait of a person in a cyberpunk setting...'"
+                        }
                       />
                       
                       {/* Suggestions Dropdown */}
